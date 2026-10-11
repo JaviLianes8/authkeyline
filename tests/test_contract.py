@@ -4,7 +4,14 @@ import authkeyline
 
 # The public API. Add every exported name here as the library grows; this list is the
 # contract and the test below fails if the module and this list disagree.
-PUBLIC_API: list[str] = []
+PUBLIC_API: list[str] = [
+    "AuthKeyError",
+    "AuthorizedKey",
+    "KeyOption",
+    "build_line",
+    "parse_file",
+    "parse_line",
+]
 
 
 def test_all_lists_exactly_the_public_api() -> None:
