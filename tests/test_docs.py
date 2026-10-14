@@ -56,14 +56,16 @@ def test_changelog_has_an_entry_for_this_version() -> None:
 
 
 def test_no_em_dash_anywhere_in_the_tree() -> None:
+    # Only the project's own files: build folders, venvs and fetched sources are not ours.
     suffixes = {".py", ".md", ".toml", ".ps1", ".txt", ".yml", ".json"}
-    for path in ROOT.rglob("*"):
+    paths = [path for path in ROOT.iterdir() if path.is_file()]
+    for folder in ("src", "tests", "scripts", ".github"):
+        paths += ROOT.joinpath(folder).rglob("*")
+    for path in paths:
         parts = path.relative_to(ROOT).parts
         if not path.is_file() or path.suffix not in suffixes or parts[:2] == ("tests", "upstream"):
             continue
-        if any(
-            (part.startswith(".") and part != ".github") or part == "__pycache__" for part in parts
-        ):
+        if "__pycache__" in parts:
             continue
         assert chr(0x2014) not in path.read_text(encoding="utf-8"), path
 
