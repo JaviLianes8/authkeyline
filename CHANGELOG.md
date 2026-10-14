@@ -30,8 +30,14 @@ All notable changes to this project are documented here. The format follows
   them), `values()`, `has_flag()` and `environment()`; `PublicKey` and `Certificate`.
 - `check_file` lists every broken line; `AuthKeyError` carries `reason` and `line`.
 - `KEY_TYPES`, the key type names sshd accepts.
+- Lines are read as sshd reads them: a NUL ends the line, CR and other C whitespace are
+  ignored inside the blob and allowed in the comment, the base64 must be canonical (no
+  set spare bits), numbers in `tunnel` and ports may carry a sign or leading blanks, and
+  an `expiry-time` at the UTC epoch is refused.
+- Certificate signature types must fit the CA key; the signature itself is not verified.
 - The `authkeyline` command (and `python -m authkeyline`): an `ssh-keygen -l` style
-  listing, `--json`, `--check`, `-E md5`.
+  listing that keeps comment bytes as they are, `--json`, `--check`, `-E md5`; exit
+  status 1 for broken lines and 2 for unreadable files.
 
 
 ## [0.1.0]

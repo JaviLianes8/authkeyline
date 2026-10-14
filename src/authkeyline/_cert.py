@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Literal
 
 from ._errors import AuthKeyError
+from ._keytypes import KEY_TYPES, SIGNATURE_NAMES
 from ._records import Certificate, PublicKey
 from ._wire import Reader
 
@@ -28,6 +29,11 @@ def read_certificate(reader: Reader, decode_ca: Callable[[bytes], PublicKey]) ->
     signature = Reader(reader.string(), "certificate signature")
     signature_type = signature.cstring()
     ca_key = decode_ca(ca_blob)
+    ca_kind = KEY_TYPES[ca_key.key_type]
+    if signature_type not in SIGNATURE_NAMES[(ca_kind.family, ca_kind.curve)]:
+        raise AuthKeyError(
+            f"certificate signature {signature_type!r} cannot come from a {ca_kind.short} CA"
+        )
     cert_type = _CERT_TYPES.get(type_code)
     if cert_type is None:
         raise AuthKeyError(f"certificate type {type_code} is neither user (1) nor host (2)")

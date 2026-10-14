@@ -118,8 +118,9 @@ authkeyline --json authorized_keys           # options, sizes, certificate detai
 authkeyline --check authorized_keys          # only report broken lines
 ```
 
-Broken lines go to standard error as `FILE:LINE: reason` and the exit status is 1. The
-listing matches `ssh-keygen -l` byte for byte (the test suite compares them).
+Broken lines go to standard error as `FILE:LINE: reason` and the exit status is 1; a file
+that cannot be read gives status 2. The listing matches `ssh-keygen -l` byte for byte,
+comments in any encoding included (the test suite compares them).
 
 ## API
 
@@ -151,17 +152,26 @@ listing matches `ssh-keygen -l` byte for byte (the test suite compares them).
 - Fingerprints are computed over the bare key, as `ssh-keygen -l` does, so a certificate
   has the fingerprint of its key.
 
-Not done: certificate signatures are not verified and `from=` patterns are not matched
-against a client, as both need a crypto library or a connection. Port names such as
-`host:ssh` in `permitopen` are refused, since sshd resolves them per system.
+Where it differs from sshd, on purpose:
+
+- Certificate signatures are not verified (that needs a crypto library), so a certificate
+  with a forged signature parses while sshd skips it. The signature type is checked
+  against the CA key. Certificates are rare in `authorized_keys`; CA keys marked
+  `cert-authority` are plain keys and fully checked.
+- `from=` patterns are kept as text, not matched against a client.
+- Port names such as `host:ssh` in `permitopen` are refused, since sshd resolves them
+  through the local services database, which differs per system.
+- `build_line` keeps comments and values to one line of text without NUL or CR. sshd
+  would cut a line at a NUL and ignore a CR in the comment, and `parse_line` reads such
+  lines the same way, but a written line never contains them.
 
 ## Why
 
 An `authorized_keys` line packs an options field, a key type, a base64 blob and a comment
 into one string, and the options field has its own grammar. Splitting on whitespace or
 commas gets it wrong, and a builder that quotes values naively lets a value add options or
-whole keys. This library reads a line exactly as sshd does, says why sshd would skip it,
-and writes lines that cannot be steered.
+whole keys. This library reads a line as sshd does (with the differences listed above),
+says why sshd would skip it, and writes lines that cannot be steered.
 
 ## License
 

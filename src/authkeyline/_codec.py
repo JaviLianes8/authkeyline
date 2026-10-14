@@ -24,15 +24,19 @@ class LineProblem:
 def parse_line(line: str) -> AuthorizedKey:
     """Parse one authorized_keys line, checking it the way sshd does.
 
+    Certificate signatures are the one thing not verified (that needs a crypto library);
+    see :class:`Certificate`.
+
     Raises :class:`AuthKeyError` for blank and comment lines, unknown or malformed options,
     unknown key types, and blobs that do not decode to a key of the stated type.
     """
-    text = line.removesuffix("\n").removesuffix("\r").lstrip(_BLANK).rstrip(_BLANK)
+    text = line.removesuffix("\n")
+    if "\n" in text:
+        raise AuthKeyError("text holds more than one line")
+    # sshd works on C strings: a NUL ends the line; the comment is never looked at.
+    text = text.split("\0", 1)[0].lstrip(_BLANK).rstrip(" \t\r")
     if not text or text.startswith("#"):
         raise AuthKeyError("not an authorized_keys entry")
-    for char in ("\0", "\r", "\n"):
-        if char in text:
-            raise AuthKeyError(f"line holds a {char!r} character")
     options: tuple[KeyOption, ...] = ()
     if _first_field(text) not in KEY_TYPES:
         options, end = read_options(text)
@@ -67,7 +71,10 @@ def parse_file(text: str) -> list[AuthorizedKey]:
 
 
 def check_file(text: str) -> list[LineProblem]:
-    """Every line that sshd would skip as broken, in order; an empty list means clean."""
+    """Every line that sshd would skip as broken, in order; an empty list means clean.
+
+    A certificate whose signature does not verify is not caught, see :func:`parse_line`.
+    """
     problems: list[LineProblem] = []
     for number, raw in _entries(text):
         try:
@@ -81,8 +88,9 @@ def build_line(key: AuthorizedKey) -> str:
     """Render an :class:`AuthorizedKey` as one line, refusing anything that would not read back.
 
     Option names must be known flags or valued options, values cannot hold NUL, CR or LF or
-    end with a backslash, the comment cannot break the line, and the result must parse back
-    to the same record.
+    end with a backslash, the comment cannot hold them either (sshd would cut or ignore
+    them, so a written line keeps to plain text), and the result must parse back to the
+    same record.
     """
     if key.key_type not in KEY_TYPES:
         raise AuthKeyError(f"unsupported key type {key.key_type!r}")

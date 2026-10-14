@@ -107,7 +107,7 @@ def test_permitopen_accepts_host_and_port(value: str) -> None:
     "value",
     ["host", "host:", "h:0", "h:65536", "h:ssh", "[::1", "[::1]", "[::1]x80", "::1:80", "h:1:2"],
 )
-def test_permitopen_rejects_bad_targets(value: str) -> None:
+def test_permitopen_rejects_bad_targets_and_port_names(value: str) -> None:
     with pytest.raises(AuthKeyError, match="permitopen"):
         options(f'permitopen="{value}"')
 

@@ -6,6 +6,7 @@ without checking it, so it pins key types, blobs, sizes and fingerprints, not op
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import io
 import shutil
@@ -128,3 +129,40 @@ def listing_lenient(path: Path) -> str:
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
         assert main([str(path)]) == 1
     return out.getvalue()
+
+
+def _tampered_base64(text: str) -> str:
+    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    return text[:-2] + alphabet[alphabet.index(text[-2]) ^ 1] + "="
+
+
+def test_both_skip_spare_base64_bits_and_keep_odd_comments(generated: Path) -> None:
+    ecdsa = (generated / "e256.pub").read_text().split()
+    assert ecdsa[1].endswith("=") and not ecdsa[1].endswith("==")
+    good = ed25519_text(generated)
+    lines = [
+        good,
+        f"{ecdsa[0]} {_tampered_base64(ecdsa[1])} spare bits",
+        f"{ecdsa[0]} {ecdsa[1]} cr\rinside",
+        f"{ecdsa[0]} {ecdsa[1]} nul\0cut",
+    ]
+    path = generated / "odd"
+    path.write_bytes(("\n".join(lines) + "\n").encode())
+    expected = keygen("-l", "-f", path)
+    assert expected.returncode == 0, expected.stderr
+    assert expected.stdout.count("\n") == 3
+    assert listing_lenient(path) == expected.stdout
+
+
+def test_flipped_certificate_signature_is_the_documented_gap(generated: Path) -> None:
+    cert_type, data, comment = (generated / "e256-cert.pub").read_text().split(None, 2)
+    raw = base64.b64decode(data)
+    flipped = base64.b64encode(raw[:-1] + bytes([raw[-1] ^ 1])).decode()
+    path = generated / "flipped"
+    path.write_text(f"{ed25519_text(generated)}\n{cert_type} {flipped} {comment}")
+    assert keygen("-l", "-f", path).stdout.count("\n") == 1
+    assert parse_line(f"{cert_type} {flipped}").public_key().certificate is not None
+
+
+def ed25519_text(folder: Path) -> str:
+    return (folder / "ed.pub").read_text().strip()

@@ -6,7 +6,7 @@ import argparse
 import json
 import sys
 from collections.abc import Sequence
-from typing import Any, Literal
+from typing import Any, Literal, TextIO
 
 from ._codec import check_file, parse_line
 from ._errors import AuthKeyError
@@ -15,7 +15,7 @@ from ._records import PublicKey
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Run the command line; return the exit status (1 when a line is broken)."""
+    """Run the command line; return 1 when a line is broken, 2 when a file cannot be read."""
     parser = argparse.ArgumentParser(
         prog="authkeyline",
         description="List or check the keys of OpenSSH authorized_keys files.",
@@ -26,14 +26,20 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="only report broken lines")
     args = parser.parse_args(argv)
     names = args.files or ["-"]
-    failed = False
+    status = 0
     report: list[dict[str, Any]] = []
     for name in names:
-        text = _read(name)
+        try:
+            text = _read(name)
+        except OSError as exc:
+            _write(sys.stderr, f"authkeyline: {name}: {exc.strerror or exc}")
+            status = 2
+            continue
         problems = {problem.line: problem.message for problem in check_file(text)}
         for number, message in problems.items():
-            print(f"{name}:{number}: {message}", file=sys.stderr)
-        failed = failed or bool(problems)
+            _write(sys.stderr, f"{name}:{number}: {message}")
+        if problems:
+            status = max(status, 1)
         if args.check:
             continue
         for number, raw in enumerate(text.split("\n"), start=1):
@@ -46,22 +52,39 @@ def main(argv: Sequence[str] | None = None) -> int:
             if args.json:
                 report.append(_as_json(name, number, key, args.hash))
             else:
-                print(_listing(key, args.hash))
+                _write(sys.stdout, _listing(key, args.hash))
     if args.json:
-        print(json.dumps(report, indent=2))
-    return 1 if failed else 0
+        _write(sys.stdout, json.dumps(report, indent=2))
+    return status
 
 
 def _read(name: str) -> str:
+    """Bytes that are not UTF-8 survive as surrogates and are written back unchanged."""
     if name == "-":
-        return sys.stdin.read()
-    with open(name, encoding="utf-8", errors="replace") as handle:
-        return handle.read()
+        stream = getattr(sys.stdin, "buffer", None)
+        return sys.stdin.read() if stream is None else _decode(stream.read())
+    with open(name, "rb") as handle:
+        return _decode(handle.read())
+
+
+def _decode(data: bytes) -> str:
+    return data.decode("utf-8", errors="surrogateescape")
+
+
+def _write(stream: TextIO, text: str) -> None:
+    raw = getattr(stream, "buffer", None)
+    if raw is None:
+        stream.write(text + "\n")
+        return
+    stream.flush()
+    raw.write(text.encode("utf-8", errors="surrogateescape") + b"\n")
+    raw.flush()
 
 
 def _listing(key: AuthorizedKey, hash: Literal["sha256", "md5"]) -> str:
     public = key.public_key()
-    comment = key.comment or "no comment"
+    # ssh-keygen -l reads lines up to the first CR, so the shown comment stops there too.
+    comment = key.comment.split("\r", 1)[0] or "no comment"
     return f"{public.bits} {public.fingerprint(hash)} {comment} ({public.short_type})"
 
 

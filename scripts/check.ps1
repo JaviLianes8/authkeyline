@@ -11,6 +11,6 @@ function Invoke-Step($label, [scriptblock]$cmd) {
 
 Invoke-Step "ruff format" { ruff format --check . }
 Invoke-Step "ruff lint"   { ruff check . }
-Invoke-Step "mypy"        { mypy --strict src }
+Invoke-Step "mypy"        { mypy --strict src tests }
 Invoke-Step "pytest"      { pytest }
 Write-Host "gate green"

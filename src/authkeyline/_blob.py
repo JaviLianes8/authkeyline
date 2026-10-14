@@ -18,13 +18,20 @@ ED25519_SIZE = 32
 MLDSA44_ED25519_SIZE = 1312 + 32
 # sshkey_size falls back to the impl keybits for key types without a size function.
 _FIXED_BITS = {"ed25519": 256, "ed25519-sk": 256, "mldsa44-ed25519": 512}
+# isspace() in the C locale; b64_pton skips these anywhere in the blob.
+_C_SPACE = frozenset(" \t\n\v\f\r")
 
 
 def decode_base64(text: str) -> bytes:
+    """Decode as OpenSSH's b64_pton: whitespace skipped, padding and zero spare bits required."""
+    clean = "".join(char for char in text if char not in _C_SPACE)
     try:
-        return base64.b64decode(text, validate=True)
+        raw = base64.b64decode(clean, validate=True)
     except (binascii.Error, ValueError) as exc:
         raise AuthKeyError(f"key blob is not valid base64: {text[:40]!r}") from exc
+    if base64.b64encode(raw).decode("ascii") != clean:
+        raise AuthKeyError(f"key blob is not canonical base64: {text[:40]!r}")
+    return raw
 
 
 def decode_key(blob: bytes, *, allow_cert: bool = True) -> PublicKey:

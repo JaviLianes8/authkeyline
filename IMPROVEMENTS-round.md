@@ -8,11 +8,11 @@ Progress:
 - [x] Fingerprints (SHA256, MD5) and bits as ssh-keygen prints them
 - [x] Safe builder that cannot inject options, lines or keys
 - [x] File checking with line numbers, command line
-- [ ] Contracts: pinned sources, upstream authopt cases, ssh-keygen oracle, README examples, installed wheel
+- [x] Contracts: pinned sources, upstream authopt cases, ssh-keygen oracle, README examples, installed wheel
 - [x] Docs and packaging
 - [x] Gates: ruff format, ruff check, mypy --strict, pytest
 - [ ] Mutation run: removing guarded logic makes the suite fail
-- [ ] Independent review findings fixed with regression tests
+- [x] Independent review findings fixed with regression tests
 - [ ] Pull request opened, guard clean
 
 ## Starting point
@@ -128,3 +128,25 @@ throwaway keys and certificates. It runs only when `ssh-keygen` is on the PATH.
 - Port names in `permitopen` and `permitlisten` (`host:ssh`): sshd resolves them with the
   local services database, which differs per system; only numbers and `*` are accepted.
 - `ssh-dss`: removed from current OpenSSH and absent from the sshd(8) list.
+
+## Independent review
+
+Fixed, each with a test in `tests/test_review_fixes.py` and, where ssh-keygen can say
+it, a two-way oracle case in `tests/test_oracle.py`:
+
+- Base64 whose spare bits before the padding were set was accepted; `b64_pton` refuses
+  it. The blob must now be canonical, and C whitespace inside it is skipped as
+  `b64_pton` does.
+- CR and NUL were refused anywhere in a line, while sshd ignores the comment and works
+  on C strings. A NUL now ends the line and a CR may sit in the comment; `build_line`
+  still writes neither.
+- `tunnel` and port numbers did not take the sign and leading blanks `strtonum`
+  accepts, and an `expiry-time` at the UTC epoch, which sshd refuses, was accepted.
+- A certificate's signature type was not compared with its CA key. It is now; the
+  signature itself is still not verified, which the docs and a test now state plainly
+  instead of claiming full sshd parity.
+- The command line crashed on a missing file or a directory (now status 2 with a
+  message) and on comments that are not UTF-8 or not printable on the console (files and
+  stdin are read as bytes and the comment is written back unchanged). The shown comment
+  stops at a CR, as in `ssh-keygen -l`.
+- The local gate type-checks the tests again (`mypy --strict src tests`).

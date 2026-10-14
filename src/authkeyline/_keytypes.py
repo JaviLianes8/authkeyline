@@ -58,3 +58,18 @@ PLAIN_NAMES: dict[tuple[str, str | None], str] = {
 
 def short_name(kind: KeyType) -> str:
     return kind.short + ("-CERT" if kind.cert else "")
+
+
+# Signature names each CA key type can produce (the sigalg entries of the sshkey.c impls).
+SIGNATURE_NAMES: dict[tuple[str, str | None], frozenset[str]] = {
+    ("ed25519", None): frozenset({"ssh-ed25519"}),
+    ("ed25519-sk", None): frozenset({"sk-ssh-ed25519@openssh.com"}),
+    ("mldsa44-ed25519", None): frozenset({"ssh-mldsa44-ed25519"}),
+    ("ecdsa", "nistp256"): frozenset({"ecdsa-sha2-nistp256"}),
+    ("ecdsa", "nistp384"): frozenset({"ecdsa-sha2-nistp384"}),
+    ("ecdsa", "nistp521"): frozenset({"ecdsa-sha2-nistp521"}),
+    ("ecdsa-sk", "nistp256"): frozenset(
+        {"sk-ecdsa-sha2-nistp256@openssh.com", "webauthn-sk-ecdsa-sha2-nistp256@openssh.com"}
+    ),
+    ("rsa", None): frozenset({"ssh-rsa", "rsa-sha2-256", "rsa-sha2-512"}),
+}

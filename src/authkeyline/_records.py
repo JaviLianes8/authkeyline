@@ -12,7 +12,11 @@ from ._errors import AuthKeyError
 
 @dataclass(frozen=True)
 class Certificate:
-    """The body of an OpenSSH certificate (draft-miller-ssh-cert), signature not verified."""
+    """The body of an OpenSSH certificate (draft-miller-ssh-cert).
+
+    The signature type is checked against the CA key, but the signature itself is not
+    verified: sshd verifies it and skips the line when it does not match.
+    """
 
     cert_type: Literal["user", "host"]
     serial: int

@@ -30,6 +30,8 @@ NI_MAXHOST = 1025
 
 _ENV_NAME = re.compile(r"[A-Za-z0-9_]+\Z")
 _DIGITS = re.compile(r"[0-9]+\Z")
+# strtonum (through strtoll) takes leading C whitespace and a sign before the digits.
+_STRTONUM = re.compile(r"[ \t\n\v\f\r]*[+-]?[0-9]+\Z")
 _TIME_RANGES = ((4, 6, 1, 12), (6, 8, 1, 31), (8, 10, 0, 23), (10, 12, 0, 59), (12, 14, 0, 60))
 
 
@@ -52,7 +54,7 @@ def check_value(name: str, value: str) -> None:
     elif name in ("permitopen", "permitlisten"):
         _check_permit(name, value)
     elif name == "tunnel":
-        if value.lower() != "any" and not (_DIGITS.match(value) and int(value) <= TUNNEL_MAX):
+        if value.lower() != "any" and not _number_in(value, 0, TUNNEL_MAX):
             raise AuthKeyError(f"tunnel={value!r} is not a device number or 'any'")
     elif name == "expiry-time":
         _check_time(value)
@@ -76,18 +78,24 @@ def _check_permit(name: str, value: str) -> None:
         host, port = value[: cut.start()], value[cut.end() :]
     if len(host.encode()) >= NI_MAXHOST:
         raise AuthKeyError(f"{name} host name is too long")
-    if port != "*" and not (_DIGITS.match(port) and 0 < int(port) <= 65535):
+    if port != "*" and not _number_in(port, 1, 65535):
         raise AuthKeyError(f"{name}={value!r} needs a port from 1 to 65535 or *")
 
 
+def _number_in(text: str, low: int, high: int) -> bool:
+    return bool(_STRTONUM.match(text)) and low <= int(text) <= high
+
+
 def _check_time(value: str) -> None:
-    text = value
+    text, utc = value, False
     if len(text) > 1 and text[-1] in "zZ":
-        text = text[:-1]
+        text, utc = text[:-1], True
     elif len(text) > 3 and text[-3:].upper() == "UTC":
-        text = text[:-3]
+        text, utc = text[:-3], True
     if len(text) not in (8, 12, 14) or not _DIGITS.match(text):
         raise AuthKeyError(f"expiry-time={value!r} is not YYYYMMDD[Z] or YYYYMMDDHHMM[SS][Z]")
     for start, end, low, high in _TIME_RANGES:
         if end <= len(text) and not low <= int(text[start:end]) <= high:
             raise AuthKeyError(f"expiry-time={value!r} is out of range")
+    if utc and text.ljust(14, "0") == "19700101000000":
+        raise AuthKeyError(f"expiry-time={value!r} is the epoch, which sshd refuses")
