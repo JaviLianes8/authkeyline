@@ -121,3 +121,32 @@ def test_fingerprint_formats() -> None:
     with pytest.raises(AuthKeyError, match="unknown fingerprint hash"):
         key.fingerprint("sha1")  # type: ignore[arg-type]
     assert parse_line(line(key.blob)).fingerprint("md5") == md5
+
+
+def test_ecdsa_coordinate_at_or_above_the_prime_is_refused() -> None:
+    from authkeyline._curves import CURVES
+
+    # P-521 coordinates take 66 bytes, so x + p always fits and is the same x modulo p.
+    curve, size = CURVES["nistp521"], CURVES["nistp521"].size
+    point = ec_point("nistp521")
+    x = int.from_bytes(point[1 : 1 + size], "big") + curve.p
+    shifted = b"\x04" + x.to_bytes(size, "big") + point[1 + size :]
+    name = "ecdsa-sha2-nistp521"
+    rejects(string(name) + string("nistp521") + string(shifted), "not on the", name)
+
+
+def test_ecdsa_point_needs_the_uncompressed_marker() -> None:
+    name = "ecdsa-sha2-nistp256"
+    point = ec_point("nistp256")
+    for marker in (0x05, 0x06, 0x07):
+        hybrid = bytes([marker]) + point[1:]
+        rejects(string(name) + string("nistp256") + string(hybrid), "uncompressed", name)
+
+
+def test_integer_field_longer_than_the_limit_is_refused_even_when_small() -> None:
+    name = "ssh-rsa"
+    modulus = mpint(1 << 2047 | 1)
+    padded_exponent = string(bytes(2049) + b"\x03")
+    rejects(string(name) + padded_exponent + modulus, "larger than 16384 bits", name)
+    accepted = string(bytes(2048) + b"\x03")
+    assert parse_line(line(string(name) + accepted + modulus, name)).public_key().bits == 2048
