@@ -3,14 +3,14 @@
 Progress:
 - [x] Brainstorm ranked improvements (this file)
 - [x] Pin the ground truth: sshd(8), OpenSSH option and key parsers, RFC 4253, RFC 5656, RFC 5903, RFC 8709, RFC 8332, draft-miller-ssh-cert-06
-- [ ] Option grammar and rules as sshd applies them (dequoting, flags, valued options)
-- [ ] Key blob decoding: embedded type, per-type fields, curve points, RSA size, certificates
-- [ ] Fingerprints (SHA256, MD5) and bits as ssh-keygen prints them
-- [ ] Safe builder that cannot inject options, lines or keys
-- [ ] File checking with line numbers, command line
+- [x] Option grammar and rules as sshd applies them (dequoting, flags, valued options)
+- [x] Key blob decoding: embedded type, per-type fields, curve points, RSA size, certificates
+- [x] Fingerprints (SHA256, MD5) and bits as ssh-keygen prints them
+- [x] Safe builder that cannot inject options, lines or keys
+- [x] File checking with line numbers, command line
 - [ ] Contracts: pinned sources, upstream authopt cases, ssh-keygen oracle, README examples, installed wheel
-- [ ] Docs and packaging
-- [ ] Gates: ruff format, ruff check, mypy --strict, pytest
+- [x] Docs and packaging
+- [x] Gates: ruff format, ruff check, mypy --strict, pytest
 - [ ] Mutation run: removing guarded logic makes the suite fail
 - [ ] Independent review findings fixed with regression tests
 - [ ] Pull request opened, guard clean
