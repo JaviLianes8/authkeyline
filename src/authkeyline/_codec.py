@@ -84,6 +84,10 @@ def build_line(key: AuthorizedKey) -> str:
     end with a backslash, the comment cannot break the line, and the result must parse back
     to the same record.
     """
+    if key.key_type not in KEY_TYPES:
+        raise AuthKeyError(f"unsupported key type {key.key_type!r}")
+    if not key.key_base64 or any(char in key.key_base64 for char in " \t\r\n\0"):
+        raise AuthKeyError("key blob must be one base64 word")
     fields = []
     if key.options:
         fields.append(",".join(_build_option(option) for option in key.options))

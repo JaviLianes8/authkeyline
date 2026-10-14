@@ -109,6 +109,7 @@ def certificate(
     principals: tuple[str, ...] = ("alice",),
     ca: bytes | None = None,
     extensions: tuple[tuple[str, bytes], ...] = (("permit-pty", b""),),
+    raw_extensions: bytes | None = None,
 ) -> bytes:
     """A certificate blob with a random nonce and a placeholder signature."""
     body = string(name) + string(secrets.token_bytes(32))
@@ -116,6 +117,7 @@ def certificate(
     body += struct.pack(">QI", 7, cert_type) + string("key-id")
     body += string(b"".join(string(p) for p in principals))
     body += struct.pack(">QQ", 0, 2**64 - 1) + string(b"")
-    body += string(b"".join(string(n) + string(d) for n, d in extensions)) + string(b"")
+    packed = b"".join(string(n) + string(d) for n, d in extensions)
+    body += string(packed if raw_extensions is None else raw_extensions) + string(b"")
     body += string(ca if ca is not None else blob("ssh-ed25519", "ed25519"))
     return body + string(string("ssh-ed25519") + string(secrets.token_bytes(64)))
