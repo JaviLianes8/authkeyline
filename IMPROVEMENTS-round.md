@@ -13,7 +13,7 @@ Progress:
 - [x] Gates: ruff format, ruff check, mypy --strict, pytest
 - [x] Mutation run: removing guarded logic makes the suite fail
 - [x] Independent review findings fixed with regression tests
-- [ ] Pull request opened, guard clean
+- [x] Pull request opened (#2), guard clean
 
 ## Starting point
 
