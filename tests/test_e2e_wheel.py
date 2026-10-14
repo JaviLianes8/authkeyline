@@ -1,0 +1,106 @@
+"""Build the wheel, install it in a throwaway venv and drive the installed package.
+
+Slow and needs the build backend, so it runs only with AUTHKEYLINE_E2E=1.
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+import venv
+import zipfile
+from pathlib import Path
+
+import pytest
+from keyfactory import b64, blob, certificate, ed25519_line
+
+ROOT = Path(__file__).resolve().parents[1]
+
+pytestmark = pytest.mark.skipif(
+    os.environ.get("AUTHKEYLINE_E2E") != "1", reason="set AUTHKEYLINE_E2E=1 to build"
+)
+
+PROGRAM = r"""
+import dataclasses, importlib.metadata, importlib.resources, sys
+import authkeyline as ak
+
+assert "site-packages" in ak.__file__, ak.__file__
+assert importlib.metadata.version("authkeyline") == ak.__version__
+assert importlib.resources.files("authkeyline").joinpath("py.typed").is_file()
+good, cert, rsa = sys.argv[1:4]
+key = ak.parse_line('restrict,command="a \\"b\\" c:\\\\x" ' + good)
+assert key.options[1].value == 'a "b" c:\\\\x' and key.has_flag("RESTRICT")
+assert ak.parse_line(ak.build_line(key)) == key
+assert key.public_key().bits == 256 and key.fingerprint().startswith("SHA256:")
+assert ak.parse_line(cert).public_key().certificate.principals == ("alice",)
+assert ak.parse_line(rsa).public_key().short_type == "RSA"
+assert ak.check_file(good + "\nbogus " + good) == [ak.LineProblem(2, "unknown option 'bogus'")]
+assert "ssh-ed25519" in ak.KEY_TYPES
+for call in (
+    lambda: ak.parse_line("command=x " + good),
+    lambda: ak.parse_line("ssh-rsa " + good.split()[1]),
+    lambda: ak.build_line(dataclasses.replace(key, comment="x\nssh-ed25519 AAAA")),
+    lambda: ak.build_line(dataclasses.replace(key, options=(ak.KeyOption("command", "a\\"),))),
+):
+    try:
+        call()
+    except ak.AuthKeyError as error:
+        assert isinstance(error, ValueError)
+    else:
+        raise AssertionError("expected AuthKeyError")
+print("e2e ok")
+"""
+
+
+def _run(
+    *cmd: str | Path, cwd: Path | None = None, stdin: bytes = b""
+) -> subprocess.CompletedProcess[bytes]:
+    return subprocess.run(
+        [str(c) for c in cmd], cwd=cwd, input=stdin, capture_output=True, check=False
+    )
+
+
+def test_installed_wheel_end_to_end(tmp_path: Path) -> None:
+    dist = tmp_path / "dist"
+    built = _run(sys.executable, "-m", "build", "--outdir", dist, ROOT)
+    assert built.returncode == 0, built.stderr
+    (wheel,) = dist.glob("authkeyline-*.whl")
+    (sdist,) = dist.glob("authkeyline-*.tar.gz")
+    names = zipfile.ZipFile(wheel).namelist()
+    assert "authkeyline/py.typed" in names and "authkeyline/__main__.py" in names
+    assert not any(name.startswith(("tests/", "scripts/")) for name in names)
+    entry_points = next(name for name in names if name.endswith("entry_points.txt"))
+    text = zipfile.ZipFile(wheel).read(entry_points).decode()
+    assert "authkeyline = authkeyline._cli:main" in text
+    listing = _run(sys.executable, "-m", "tarfile", "-l", sdist).stdout.decode()
+    assert "IMPROVEMENTS-round" not in listing and "sshd.8" not in listing
+    assert "tests/upstream/MANIFEST.json" in listing and "rfc" not in listing
+    assert not any(line.endswith((".c", ".h")) for line in listing.splitlines())
+    assert "tests/test_sources.py" in listing and "scripts/fetch_upstream.py" in listing
+
+    env_dir = tmp_path / "venv"
+    venv.create(env_dir, with_pip=True)
+    bindir = env_dir / ("Scripts" if sys.platform == "win32" else "bin")
+    python = bindir / "python"
+    installed = _run(python, "-m", "pip", "install", "-q", wheel)
+    assert installed.returncode == 0, installed.stderr
+
+    good = ed25519_line("e2e key")
+    cert = f"ssh-ed25519-cert-v01@openssh.com {b64(certificate())} c"
+    rsa = f"rsa-sha2-256 {b64(blob('ssh-rsa', 'rsa'))}"
+    # Run from an empty folder so the source tree cannot shadow the install.
+    work = tmp_path / "work"
+    work.mkdir()
+    result = _run(python, "-I", "-c", PROGRAM, good, cert, rsa, cwd=work)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.decode().strip() == "e2e ok"
+
+    script = bindir / ("authkeyline.exe" if sys.platform == "win32" else "authkeyline")
+    for command in ([python, "-m", "authkeyline"], [script]):
+        shown = _run(*command, cwd=work, stdin=f"# c\n{good}\n".encode())
+        assert shown.returncode == 0, shown.stderr
+        out = shown.stdout.decode()
+        assert out.startswith("256 SHA256:") and out.rstrip().endswith("e2e key (ED25519)")
+        failed = _run(*command, "--check", cwd=work, stdin=f"bogus {good}\n".encode())
+        assert failed.returncode == 1 and b"-:1: unknown option 'bogus'" in failed.stderr

@@ -5,10 +5,15 @@ import authkeyline
 # The public API. Add every exported name here as the library grows; this list is the
 # contract and the test below fails if the module and this list disagree.
 PUBLIC_API: list[str] = [
+    "KEY_TYPES",
     "AuthKeyError",
     "AuthorizedKey",
+    "Certificate",
     "KeyOption",
+    "LineProblem",
+    "PublicKey",
     "build_line",
+    "check_file",
     "parse_file",
     "parse_line",
 ]

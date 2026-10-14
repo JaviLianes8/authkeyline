@@ -1,150 +1,142 @@
-"""Parse and rebuild OpenSSH authorized_keys lines."""
+"""Parse, check and rebuild OpenSSH authorized_keys lines."""
 
 from __future__ import annotations
 
-import re
+from dataclasses import dataclass
 
-from ._model import AuthKeyError, AuthorizedKey, KeyOption
+from ._errors import AuthKeyError
+from ._keytypes import KEY_TYPES
+from ._model import AuthorizedKey, KeyOption
+from ._options import read_options
+from ._optrules import VALUED, flag_name
 
-_KEY_TYPE_PREFIXES = ("ssh-", "ecdsa-", "sk-")
-_BASE64 = re.compile(r"^[A-Za-z0-9+/]+={0,2}$")
+_BLANK = " \t"
+
+
+@dataclass(frozen=True)
+class LineProblem:
+    """A line of a file that sshd would not use, with the reason."""
+
+    line: int
+    message: str
 
 
 def parse_line(line: str) -> AuthorizedKey:
-    """Parse one authorized_keys line into an :class:`AuthorizedKey`.
+    """Parse one authorized_keys line, checking it the way sshd does.
 
-    Rejects blank lines, comment lines and anything missing a key type or blob.
+    Certificate signatures are the one thing not verified (that needs a crypto library);
+    see :class:`Certificate`.
+
+    Raises :class:`AuthKeyError` for blank and comment lines, unknown or malformed options,
+    unknown key types, and blobs that do not decode to a key of the stated type.
     """
-    text = line.strip()
+    text = line.removesuffix("\n")
+    if "\n" in text:
+        raise AuthKeyError("text holds more than one line")
+    # sshd works on C strings: a NUL ends the line; the comment is never looked at.
+    text = text.split("\0", 1)[0].lstrip(_BLANK).rstrip(" \t\r")
     if not text or text.startswith("#"):
         raise AuthKeyError("not an authorized_keys entry")
-
-    first, rest = _split_field(text)
-    if _is_key_type(first):
-        options: tuple[KeyOption, ...] = ()
-        key_type, rest = first, rest
-    else:
-        options = _parse_options(first)
-        key_type, rest = _split_field(rest)
-
+    options: tuple[KeyOption, ...] = ()
+    if _first_field(text) not in KEY_TYPES:
+        options, end = read_options(text)
+        text = text[end:].lstrip(_BLANK)
+    key_type = _first_field(text)
     if not key_type:
         raise AuthKeyError("missing key type")
-    blob, comment = _split_field(rest)
+    if key_type not in KEY_TYPES:
+        raise AuthKeyError(f"unsupported key type {key_type!r}")
+    rest = text[len(key_type) :].lstrip(_BLANK)
+    blob = _first_field(rest)
     if not blob:
         raise AuthKeyError("missing key blob")
-    if not _BASE64.match(blob):
-        raise AuthKeyError(f"invalid key blob: {blob!r}")
-    return AuthorizedKey(
-        key_type=key_type, key_base64=blob, options=options, comment=comment.strip()
-    )
+    comment = rest[len(blob) :].lstrip(_BLANK)
+    key = AuthorizedKey(key_type=key_type, key_base64=blob, options=options, comment=comment)
+    key.public_key()
+    return key
 
 
 def parse_file(text: str) -> list[AuthorizedKey]:
-    """Parse every key in a file, skipping blank and ``#`` comment lines."""
+    """Parse every key in a file, skipping blank and ``#`` comment lines.
+
+    The first bad line raises :class:`AuthKeyError` with its ``line`` number set.
+    """
     keys: list[AuthorizedKey] = []
-    for raw in text.splitlines():
-        stripped = raw.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        keys.append(parse_line(stripped))
+    for number, raw in _entries(text):
+        try:
+            keys.append(parse_line(raw))
+        except AuthKeyError as exc:
+            raise AuthKeyError(exc.reason, number) from None
     return keys
 
 
+def check_file(text: str) -> list[LineProblem]:
+    """Every line that sshd would skip as broken, in order; an empty list means clean.
+
+    A certificate whose signature does not verify is not caught, see :func:`parse_line`.
+    """
+    problems: list[LineProblem] = []
+    for number, raw in _entries(text):
+        try:
+            parse_line(raw)
+        except AuthKeyError as exc:
+            problems.append(LineProblem(number, exc.reason))
+    return problems
+
+
 def build_line(key: AuthorizedKey) -> str:
-    """Render an :class:`AuthorizedKey` back into one authorized_keys line."""
+    """Render an :class:`AuthorizedKey` as one line, refusing anything that would not read back.
+
+    Option names must be known flags or valued options, values cannot hold NUL, CR or LF or
+    end with a backslash, the comment cannot hold them either (sshd would cut or ignore
+    them, so a written line keeps to plain text), and the result must parse back to the
+    same record.
+    """
+    if key.key_type not in KEY_TYPES:
+        raise AuthKeyError(f"unsupported key type {key.key_type!r}")
+    if not key.key_base64 or any(char in key.key_base64 for char in " \t\r\n\0"):
+        raise AuthKeyError("key blob must be one base64 word")
     fields = []
     if key.options:
         fields.append(",".join(_build_option(option) for option in key.options))
-    fields.append(key.key_type)
-    fields.append(key.key_base64)
-    line = " ".join(fields)
+    fields += [key.key_type, key.key_base64]
     if key.comment:
-        line += " " + key.comment
+        if any(char in key.comment for char in "\0\r\n"):
+            raise AuthKeyError("comment holds a NUL or a line break")
+        fields.append(key.comment)
+    line = " ".join(fields)
+    if parse_line(line) != key:
+        raise AuthKeyError("the record does not read back the same; check the fields' spacing")
     return line
 
 
-def _is_key_type(token: str) -> bool:
-    return token.startswith(_KEY_TYPE_PREFIXES)
-
-
-def _split_field(text: str) -> tuple[str, str]:
-    """Split at the first whitespace outside a quoted value."""
-    text = text.lstrip()
-    in_quote = False
-    escaped = False
-    for index, char in enumerate(text):
-        if escaped:
-            escaped = False
-            continue
-        if char == "\\" and in_quote:
-            escaped = True
-            continue
-        if char == '"':
-            in_quote = not in_quote
-            continue
-        if not in_quote and char in " \t":
-            return text[:index], text[index + 1 :]
-    return text, ""
-
-
-def _parse_options(segment: str) -> tuple[KeyOption, ...]:
-    return tuple(_parse_option(part) for part in _split_options(segment) if part)
-
-
-def _split_options(segment: str) -> list[str]:
-    """Split on commas that are not inside a quoted value."""
-    parts: list[str] = []
-    buffer: list[str] = []
-    in_quote = False
-    escaped = False
-    for char in segment:
-        if escaped:
-            buffer.append(char)
-            escaped = False
-            continue
-        if char == "\\" and in_quote:
-            buffer.append(char)
-            escaped = True
-            continue
-        if char == '"':
-            in_quote = not in_quote
-            buffer.append(char)
-            continue
-        if char == "," and not in_quote:
-            parts.append("".join(buffer))
-            buffer = []
-            continue
-        buffer.append(char)
-    parts.append("".join(buffer))
-    return parts
-
-
-def _parse_option(part: str) -> KeyOption:
-    name, sep, raw = part.partition("=")
-    if not sep:
-        return KeyOption(name)
-    return KeyOption(name, _unquote(raw))
-
-
-def _unquote(raw: str) -> str:
-    raw = raw.strip()
-    if len(raw) < 2 or raw[0] != '"' or raw[-1] != '"':
-        return raw
-    out: list[str] = []
-    escaped = False
-    for char in raw[1:-1]:
-        if escaped:
-            out.append(char)
-            escaped = False
-        elif char == "\\":
-            escaped = True
-        else:
-            out.append(char)
-    return "".join(out)
-
-
 def _build_option(option: KeyOption) -> str:
+    name = option.name
     if option.value is None:
-        return option.name
-    escaped = option.value.replace("\\", "\\\\").replace('"', '\\"')
-    return f'{option.name}="{escaped}"'
+        if flag_name(name) is None:
+            raise AuthKeyError(f"{name!r} is not a flag option")
+        return name
+    if name.lower() not in VALUED:
+        raise AuthKeyError(f"{name!r} is not a valued option")
+    value = option.value
+    if any(char in value for char in "\0\r\n"):
+        raise AuthKeyError(f"value of {name!r} holds a NUL or a line break")
+    if value.endswith("\\"):
+        raise AuthKeyError(f"value of {name!r} ends with a backslash, which sshd cannot read")
+    return name + '="' + value.replace('"', '\\"') + '"'
+
+
+def _first_field(text: str) -> str:
+    for index, char in enumerate(text):
+        if char in _BLANK:
+            return text[:index]
+    return text
+
+
+def _entries(text: str) -> list[tuple[int, str]]:
+    entries = []
+    for number, raw in enumerate(text.split("\n"), start=1):
+        stripped = raw.lstrip(_BLANK)
+        if stripped.strip() and not stripped.startswith("#"):
+            entries.append((number, raw))
+    return entries
