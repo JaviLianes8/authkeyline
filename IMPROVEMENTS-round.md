@@ -11,7 +11,7 @@ Progress:
 - [x] Contracts: pinned sources, upstream authopt cases, ssh-keygen oracle, README examples, installed wheel
 - [x] Docs and packaging
 - [x] Gates: ruff format, ruff check, mypy --strict, pytest
-- [ ] Mutation run: removing guarded logic makes the suite fail
+- [x] Mutation run: removing guarded logic makes the suite fail
 - [x] Independent review findings fixed with regression tests
 - [ ] Pull request opened, guard clean
 
@@ -128,6 +128,23 @@ throwaway keys and certificates. It runs only when `ssh-keygen` is on the PATH.
 - Port names in `permitopen` and `permitlisten` (`host:ssh`): sshd resolves them with the
   local services database, which differs per system; only numbers and `*` are accepted.
 - `ssh-dss`: removed from current OpenSSH and absent from the sshd(8) list.
+
+## Verification
+
+Final runs on a clean clone of the branch head (Windows, Python 3.14, OpenSSH for
+Windows 9.5 as the oracle there; OpenSSH 10.3 on the development machine), with the
+reference files fetched and checked against the manifest:
+
+- Gates: ruff format, ruff check, mypy --strict (src and tests) and pytest exit 0;
+  274 tests, none skipped, including the installed wheel and its console script.
+- Mutation run: 57 mutants, each removing one guard (dequoting, option names, single-use
+  options, count limits, every value rule, builder refusals and read-back, key type
+  agreement, curve identity, RSA floor, key sizes, point marker, coordinate range and
+  curve equation, mpint sign and length, NUL in text fields, trailing bytes, canonical
+  base64, certificate type, principal limit and signature type, fingerprint encoding,
+  environment precedence, CLI exit codes and byte output). The first run left three
+  alive (coordinate range, point marker, integer length); tests now pin them and the
+  second run kills all 57. The suite is green before and after.
 
 ## Independent review
 
