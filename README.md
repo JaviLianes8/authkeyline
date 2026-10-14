@@ -16,11 +16,11 @@ from authkeyline import parse_line, build_line, parse_file
 line = 'command="/usr/bin/backup",no-pty ssh-ed25519 AAAAC3NzaC1lZDI1NTE5 alice@host'
 key = parse_line(line)
 
-key.key_type        # 'ssh-ed25519'
-key.key_base64      # 'AAAAC3NzaC1lZDI1NTE5'
-key.comment         # 'alice@host'
-key.options         # (KeyOption('command', '/usr/bin/backup'), KeyOption('no-pty', None))
-key.key_bytes()     # raw bytes of the decoded blob
+key.key_type  # 'ssh-ed25519'
+key.key_base64  # 'AAAAC3NzaC1lZDI1NTE5'
+key.comment  # 'alice@host'
+key.options  # (KeyOption('command', '/usr/bin/backup'), KeyOption('no-pty', None))
+key.key_bytes()  # raw bytes of the decoded blob
 
 build_line(key) == line  # True
 ```
