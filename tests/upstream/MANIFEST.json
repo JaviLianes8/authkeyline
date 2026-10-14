@@ -205,5 +205,32 @@
     "licence": "IETF Trust Legal Provisions",
     "size": 55721,
     "sha256": "0fde82e1ef771da269df36599ca5d18524437be9f0bd14d91b0ee3ee46e00f47"
+  },
+  "auth-options.h": {
+    "title": "OpenSSH option count limits",
+    "url": "https://raw.githubusercontent.com/openssh/openssh-portable/773771be4ae241380e5f2b65059c441f7eef2da7/auth-options.h",
+    "revision": "openssh-portable commit 773771be4ae241380e5f2b65059c441f7eef2da7",
+    "fetched": "2026-10-14",
+    "licence": "OpenSSH licence (BSD-style, see LICENCE in openssh-portable)",
+    "size": 3155,
+    "sha256": "8dfcdfe79a876dfabedffc20e764fa77a9d137283d70d337ee0d2fb7a25aea18"
+  },
+  "misc.h": {
+    "title": "OpenSSH tunnel device limits",
+    "url": "https://raw.githubusercontent.com/openssh/openssh-portable/773771be4ae241380e5f2b65059c441f7eef2da7/misc.h",
+    "revision": "openssh-portable commit 773771be4ae241380e5f2b65059c441f7eef2da7",
+    "fetched": "2026-10-14",
+    "licence": "OpenSSH licence (BSD-style, see LICENCE in openssh-portable)",
+    "size": 10332,
+    "sha256": "9d629fab1b11604a23952b6ed9c0d77639c17afd4f882f831494513d9b2b3b2c"
+  },
+  "sshbuf.h": {
+    "title": "OpenSSH integer size limit",
+    "url": "https://raw.githubusercontent.com/openssh/openssh-portable/773771be4ae241380e5f2b65059c441f7eef2da7/sshbuf.h",
+    "revision": "openssh-portable commit 773771be4ae241380e5f2b65059c441f7eef2da7",
+    "fetched": "2026-10-14",
+    "licence": "OpenSSH licence (BSD-style, see LICENCE in openssh-portable)",
+    "size": 15217,
+    "sha256": "9daf0cdf535cafede176ff235882f13b10d0b59b53d02ab3101d0d385de66a50"
   }
 }

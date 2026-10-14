@@ -120,3 +120,8 @@ def test_ecdsa_curve_must_agree_with_the_line() -> None:
 def test_key_bytes_is_the_decoded_blob() -> None:
     data = string("ssh-ed25519") + string(bytes(32))
     assert parse_line(f"ssh-ed25519 {b64(data)}").key_bytes() == data
+
+
+def test_environment_mapping_keeps_the_first_value_of_a_name() -> None:
+    field = 'environment="A=1",environment="B=x=y",environment="A=2"'
+    assert parse_line(f"{field} ssh-ed25519 {KEY}").environment() == {"A": "1", "B": "x=y"}

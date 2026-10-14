@@ -55,6 +55,14 @@ class AuthorizedKey:
             if option.value is not None and option.name.lower() == wanted
         )
 
+    def environment(self) -> dict[str, str]:
+        """The ``environment`` options as a mapping; the first value of a name wins, as in sshd."""
+        variables: dict[str, str] = {}
+        for value in self.values("environment"):
+            name, _, text = value.partition("=")
+            variables.setdefault(name, text)
+        return variables
+
     def has_flag(self, name: str) -> bool:
         """Whether the flag ``name`` (``restrict``, ``no-pty``) is set, case-insensitively."""
         wanted = name.lower()
