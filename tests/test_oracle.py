@@ -25,7 +25,12 @@ pytestmark = pytest.mark.skipif(KEYGEN is None, reason="ssh-keygen is not on the
 def keygen(*args: str | Path) -> subprocess.CompletedProcess[str]:
     assert KEYGEN is not None
     return subprocess.run(
-        [KEYGEN, *map(str, args)], capture_output=True, text=True, check=False, timeout=120
+        [KEYGEN, *map(str, args)],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=120,
     )
 
 
@@ -102,10 +107,24 @@ def _rejected_blobs() -> list[tuple[str, bytes]]:
 
 @pytest.mark.parametrize("case", range(len(_rejected_blobs())))
 def test_ssh_keygen_and_the_parser_reject_the_same_blobs(case: int, tmp_path: Path) -> None:
+    # A valid key goes first: with no key at all, some ssh-keygen builds fall back to
+    # reading the file as a private key and wait for a passphrase.
     key_type, data = _rejected_blobs()[case]
+    good = f"ssh-ed25519 {b64(blob('ssh-ed25519', 'ed25519'))} good"
     line = f"{key_type} {b64(data)} bad"
-    path = tmp_path / "bad"
-    path.write_text(line + "\n")
-    assert keygen("-l", "-f", path).returncode != 0
+    path = tmp_path / "mixed"
+    path.write_text(f"{good}\n{line}\n")
+    expected = keygen("-l", "-f", path)
+    assert expected.returncode == 0, expected.stderr
+    assert expected.stdout.count("\n") == 1 and " good (ED25519)" in expected.stdout
+    assert listing_lenient(path) == expected.stdout
     with pytest.raises(AuthKeyError):
         parse_line(line)
+
+
+def listing_lenient(path: Path) -> str:
+    """The listing of the lines that parse; broken lines only go to stderr."""
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+        assert main([str(path)]) == 1
+    return out.getvalue()
