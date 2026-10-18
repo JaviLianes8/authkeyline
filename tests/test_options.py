@@ -91,7 +91,7 @@ def test_environment_accepts_a_word_name(value: str) -> None:
 
 @pytest.mark.parametrize("value", ["", "noequals", "=x", "A-B=1", "A B=1", ",=bah"])
 def test_environment_rejects_other_names(value: str) -> None:
-    with pytest.raises(AuthKeyError, match="environment="):
+    with pytest.raises(AuthKeyError, match=r"^environment (value|name) "):
         options(f'environment="{value}"')
 
 

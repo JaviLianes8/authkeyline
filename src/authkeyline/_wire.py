@@ -6,6 +6,8 @@ from ._errors import AuthKeyError
 
 # sshbuf.h: SSHBUF_MAX_BIGNUM, 16384 bits; one extra zero byte may keep the top bit clear.
 MAX_BIGNUM_BYTES = 16384 // 8
+# sshbuf.h: SSHBUF_SIZE_MAX, the largest buffer OpenSSH decodes a key blob into.
+MAX_BLOB_BYTES = 0x8000000
 
 
 class Reader:
@@ -34,11 +36,14 @@ class Reader:
         return self._take(self.u32())
 
     def cstring_bytes(self) -> bytes:
-        """A string that OpenSSH reads as C text: no NUL before its last byte."""
+        """A text field as sshbuf_get_cstring reads it: one NUL may end it, none may come before.
+
+        OpenSSH then uses it as a C string, so that final NUL is not part of the text.
+        """
         raw = self.string()
         if b"\0" in raw[:-1]:
             raise AuthKeyError(f"{self._what} has a NUL inside a text field")
-        return raw
+        return raw.removesuffix(b"\0")
 
     def cstring(self) -> str:
         return self.cstring_bytes().decode("utf-8", errors="replace")
@@ -50,9 +55,6 @@ class Reader:
         if len(raw) > MAX_BIGNUM_BYTES + 1 or (len(raw) == MAX_BIGNUM_BYTES + 1 and raw[0]):
             raise AuthKeyError(f"{self._what} has an integer larger than 16384 bits")
         return int.from_bytes(raw, "big")
-
-    def offset(self) -> int:
-        return self._pos
 
     def at_end(self) -> bool:
         return self._pos == len(self._data)
