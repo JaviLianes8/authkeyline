@@ -16,7 +16,7 @@ Progress:
 - [x] Packaging, e2e and every Python (items 8, 10, 13, 14)
 - [x] Gates (item 15)
 - [ ] Five QA lenses (item 19) and independent reviewer (item 16)
-- [ ] PR and trace guard (item 17); merge and publish left to the maintainer
+- [x] PR #3 and trace guard CLEAN (item 17); merge and publish left to the maintainer
 
 ## Scorecard
 
@@ -38,7 +38,7 @@ Progress:
 | 14 | sdist and wheel contents | PASS |
 | 15 | Gates each exit 0 | PASS: see Gates |
 | 16 | Independent reviewer | pending |
-| 17 | PR and trace guard | pending |
+| 17 | PR and trace guard | PR #3 from `release/1.0.0`, trace guard CLEAN; merge and publish left to the maintainer |
 | 18 | Contracts bite (mutations) | PASS: 32 author mutants, all killed (2 after new contracts), table in [CERT-1.0-MUTANTS.md](https://github.com/JaviLianes8/authkeyline/blob/main/CERT-1.0-MUTANTS.md) |
 | 19 | Five independent QA lenses | pending |
 
