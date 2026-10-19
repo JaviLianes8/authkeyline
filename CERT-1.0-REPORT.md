@@ -15,6 +15,7 @@ Progress:
 - [x] Docs: README, GUIDE, CHANGELOG (items 11, 12)
 - [x] Packaging, e2e and every Python (items 8, 10, 13, 14)
 - [x] Gates (item 15)
+- [x] Gates, packaging, every Python, wheel e2e and the author mutation round (38 mutants) run again at d5950d9 after the QA fixes
 - [ ] Five QA lenses (item 19) and independent reviewer (item 16): rounds 1 to 6 findings fixed, awaiting re-verification
 - [x] PR #3 and trace guard CLEAN (item 17); merge and publish left to the maintainer
 
@@ -29,17 +30,17 @@ Progress:
 | 5 | Typed, documented, bounded errors | PASS: `AuthKeyError` (a `ValueError`) with `reason` and `line`, `TypeError` for wrong argument types, messages quote at most 40 characters and never an `environment` value |
 | 6 | Contract tests of every public name | PASS |
 | 7 | Real ground truth | PASS: 26 fetched sources with a hash manifest, OpenSSH's own C code as an oracle on 12,000 seeded lines, `ssh-keygen -l` on fresh keys and certificates |
-| 8 | Real e2e from the wheel | PASS: wheel installed in a fresh venv and driven from an empty folder, the command by subprocess; no PyPI release to upgrade from |
+| 8 | Real e2e from the wheel | PASS: wheel installed in a fresh venv and driven from an empty folder, the command by subprocess; no PyPI release to upgrade from; again at d5950d9 |
 | 9 | Seeded fuzz, no crash, hang or blowup | PASS |
-| 10 | Supported Pythons | PASS: CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2, 3.14.2 and 3.14.2t, 350 passed each |
+| 10 | Supported Pythons | PASS: CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2, 3.14.2 and 3.14.2t, 555 passed each at d5950d9 |
 | 11 | README and `twine check` | PASS: `twine check --strict`, absolute links, badge, verified comparison |
 | 12 | Dated CHANGELOG section | PASS: 1.0.0, 2026-10-19 |
 | 13 | pyproject 1.0.0, Production/Stable | PASS |
 | 14 | sdist and wheel contents | PASS |
-| 15 | Gates each exit 0 | PASS: see Gates |
+| 15 | Gates each exit 0 | PASS: see Gates (again at d5950d9) |
 | 16 | Independent reviewer | pending |
 | 17 | PR and trace guard | PR #3 from `release/1.0.0`, trace guard CLEAN; merge and publish left to the maintainer |
-| 18 | Contracts bite (mutations) | PASS: 32 author mutants, all killed (2 after new contracts), table in [CERT-1.0-MUTANTS.md](https://github.com/JaviLianes8/authkeyline/blob/main/CERT-1.0-MUTANTS.md) |
+| 18 | Contracts bite (mutations) | PASS: 38 author mutants at d5950d9, all killed (2 of the first 32 after new contracts), table in [CERT-1.0-MUTANTS.md](https://github.com/JaviLianes8/authkeyline/blob/main/CERT-1.0-MUTANTS.md) |
 | 19 | Five independent QA lenses | pending |
 
 ## Baseline
@@ -110,6 +111,12 @@ start a comment (sshd skips only spaces and tabs). `tests/test_contract_edges.py
 both, the OpenSSH oracle confirmed sshd's reading of each case, and both mutants were then
 killed.
 
+On 2026-10-19, after the six QA rounds, the round was run again at d5950d9 on another
+machine: the 32 mutants (M22 rewritten for the status now held in a list) plus six new
+ones, M33 to M38, on the code the QA fixes brought: the unknown key type rule, the plain
+copy of `hash` in `fingerprint`, the escaping of every surrogate in a Windows name, the
+closed reader check and the status of an unreadable file. All 38 were killed.
+
 ## Packaging, e2e and Pythons (items 8, 10, 13, 14)
 
 At ba24013 on this PC, from a fresh clone, one process at a time:
@@ -132,6 +139,15 @@ At ba24013 on this PC, from a fresh clone, one process at a time:
 - A consumer script using every public name passed `mypy --strict` against the installed
   wheel and ran.
 
+Again on 2026-10-19 at d5950d9 (after the six QA rounds), on this PC from a fresh clone:
+`twine check --strict` passed the wheel (34,195 bytes) and the sdist (78,857 bytes); their
+listings hold the same kinds of files as above, with the new test modules in the sdist
+only. The sdist suite against the installed wheel, with fetched sources, `ssh-keygen` and
+the sshd oracle present: 555 passed and 2 skipped (the opt-in wheel test and the POSIX
+closed stdin test) on CPython 3.10.19, 3.11.5, 3.12.12, 3.13.2, 3.14.2 and 3.14.2
+free-threaded. `AUTHKEYLINE_E2E=1 pytest tests/test_e2e_wheel.py` passed. PyPI still
+answers 404 for the name, so there is no release to upgrade from.
+
 ## Gates (item 15)
 
 At 0373b42 on another machine from a fresh clone (CPython 3.14, fetched sources), each
@@ -139,6 +155,11 @@ command on its own: `ruff format --check .`, `ruff check .`, `mypy --strict src`
 `mypy --strict src tests` and `pytest` (363 passed, 6 skipped: the sshd oracle, not
 built there, and the opt-in wheel test) all exit 0. On this PC from a fresh clone at
 0373b42 with the sshd oracle and `AUTHKEYLINE_E2E=1`: 369 passed, nothing skipped.
+
+At d5950d9 on another machine from a fresh clone (CPython 3.14, fetched sources), each
+on its own: `ruff format --check .`, `ruff check .`, `mypy --strict src` (18 files),
+`mypy --strict src tests` (50 files) and `pytest` all exit 0; the skips are the sshd
+oracle (not built there), the opt-in wheel test and the POSIX closed stdin test.
 
 ## QA lenses (item 19)
 
