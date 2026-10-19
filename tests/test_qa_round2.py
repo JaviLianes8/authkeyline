@@ -21,13 +21,17 @@ SK_CERT = "sk-ecdsa-sha2-nistp256-cert-v01@openssh.com"
         f"ssh-ed25519 environment=API_TOKEN=ghp_s3cr3tValue {BLOB}",
         f'ssh-ed25519 "ghp_s3cr3tValue" {BLOB}',
         'ssh-ed25519 environment="API_TOKEN=ghp_s3cr3tValue"',
+        "ssh-ed25519 =s3cr3t",
+        "ssh-ed25519 ==s3cr3t",
     ],
-    ids=["quoted", "unquoted", "quote-only", "no-blob"],
+    ids=["quoted", "unquoted", "quote-only", "no-blob", "leading-equals", "two-leading-equals"],
 )
 def test_an_option_read_as_key_blob_does_not_leak_its_value(line: str) -> None:
     with pytest.raises(AuthKeyError) as caught:
         parse_line(line)
-    assert "s3cr3t" not in str(caught.value) and "key blob is not" in str(caught.value)
+    assert caught.value.reason == (
+        "key blob is not valid base64 (it looks like an option, so it is not quoted)"
+    )
     assert all("s3cr3t" not in problem.message for problem in check_file(line))
     hand_built = AuthorizedKey("ssh-ed25519", line.split(" ")[1])
     for call in (hand_built.public_key, hand_built.key_bytes):
@@ -42,12 +46,23 @@ def test_an_option_read_as_key_blob_does_not_leak_its_value(line: str) -> None:
         ("AAAA!x", "key blob is not valid base64: 'AAAA!x'"),
         ("AAB=", "key blob is not canonical base64: 'AAB='"),
         ("AAAAC3Nz=", "key blob is not valid base64: 'AAAAC3Nz='"),
+        ("AAB=\x0c", "key blob is not canonical base64: 'AAB=\\x0c'"),
+        ("AAB=\x0b", "key blob is not canonical base64: 'AAB=\\x0b'"),
     ],
 )
 def test_a_blob_that_is_not_option_like_is_still_quoted(blob: str, message: str) -> None:
     with pytest.raises(AuthKeyError) as caught:
-        parse_line(f"ssh-ed25519 {blob}")
+        parse_line(f"ssh-ed25519 {blob} x")
     assert caught.value.reason == message
+    with pytest.raises(AuthKeyError) as caught:
+        AuthorizedKey("ssh-ed25519", blob).key_bytes()
+    assert caught.value.reason == message
+
+
+def test_a_hand_built_blob_keeps_its_trailing_blank_in_the_message() -> None:
+    with pytest.raises(AuthKeyError) as caught:
+        AuthorizedKey("ssh-ed25519", "AAB= ").key_bytes()
+    assert caught.value.reason == "key blob is not canonical base64: 'AAB= '"
 
 
 @pytest.mark.parametrize(

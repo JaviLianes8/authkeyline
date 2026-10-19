@@ -53,8 +53,16 @@ suite checks by running that code on 12,000 seeded lines.
 - Command line: when the reader closes the pipe early (`| head`), the command ends
   quietly with the status it had instead of a traceback. The status of a broken or
   unreadable file is set before its report is written, so `2>&1 | head` still exits 1
-  or 2, and a standard stream closed before the start (`>&-`) is skipped instead of
-  ending in a traceback.
+  or 2, and an output stream closed before the start (`>&-`, `2>&-`) is skipped instead
+  of ending in a traceback. The help and usage messages follow the same rules: into a
+  closed pipe they exit 0 and 2 instead of 120, and a usage error with standard error
+  closed exits 2 on every supported Python (Python 3.10 gave 1).
+- Command line: standard input closed before the start (`<&-`) is reported as a file
+  that cannot be read (`authkeyline: -: standard input is closed`, status 2) instead of a
+  traceback with status 1.
+- A blob field with padding that is too long or not at the end (`AAAA=`, `AAB==`) now
+  gives "key blob is not valid base64" on every supported Python; Python 3.10 and 3.11
+  said "not canonical base64" for some of them. Which lines are refused does not change.
 
 ### Added
 

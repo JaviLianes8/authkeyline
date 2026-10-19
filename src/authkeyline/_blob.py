@@ -29,6 +29,8 @@ def decode_base64(text: str) -> bytes:
     if len(clean) > (MAX_BLOB_BYTES // 3 + 1) * 4:
         raise _too_big()
     try:
+        if not _whole_quanta(clean):
+            raise ValueError("padding too long or not at the end")
         raw = base64.b64decode(clean, validate=True)
     except (binascii.Error, ValueError) as exc:
         raise AuthKeyError(f"key blob is not valid base64{_shown_blob(text)}") from exc
@@ -37,6 +39,16 @@ def decode_base64(text: str) -> bytes:
     if len(raw) > MAX_BLOB_BYTES:
         raise _too_big()
     return raw
+
+
+def _whole_quanta(clean: str) -> bool:
+    """Whole four character groups with at most two "=", all at the end.
+
+    Checked before b64decode because Python 3.10 and 3.11 let excess padding through,
+    which made the message depend on the Python.
+    """
+    data = clean.rstrip("=")
+    return "=" not in data and len(clean) % 4 == 0 and len(clean) - len(data) <= 2
 
 
 def _shown_blob(text: str) -> str:

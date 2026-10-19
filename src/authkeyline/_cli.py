@@ -9,7 +9,7 @@ import errno
 import json
 import os
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from typing import Any, Literal, TextIO
 
 from ._codec import check_file, parse_line
@@ -24,7 +24,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     Usage errors also exit with status 2, through argparse.
     """
-    parser = argparse.ArgumentParser(
+    parser = _Parser(
         prog="authkeyline",
         description="List or check the keys of OpenSSH authorized_keys files.",
         epilog="exit status: 0 when every line is fine, 1 when a line is broken, 2 when a "
@@ -38,14 +38,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="only report broken lines")
     args = parser.parse_args(argv)
     status = [0]
-    try:
+    with _quiet_when_the_reader_goes():
         _run(args, status)
+    return status[0]
+
+
+class _Parser(argparse.ArgumentParser):
+    """Help and usage errors follow the same stream rules as the rest of the output."""
+
+    def _print_message(self, message: str, file: Any = None) -> None:
+        if message:
+            with _quiet_when_the_reader_goes():
+                _put(file, message)
+
+
+@contextlib.contextmanager
+def _quiet_when_the_reader_goes() -> Iterator[None]:
+    try:
+        yield
     except OSError as exc:
         # The reader went away (| head): stop quietly, as ssh-keygen does.
         if not isinstance(exc, BrokenPipeError) and exc.errno not in (errno.EPIPE, errno.EINVAL):
             raise
         _silence()
-    return status[0]
 
 
 def _run(args: argparse.Namespace, status: list[int]) -> None:
@@ -93,6 +108,9 @@ def _silence() -> None:
 def _read(name: str) -> str:
     """Bytes that are not UTF-8 survive as surrogates until the output escapes them."""
     if name == "-":
+        if sys.stdin is None:
+            # Started with standard input closed (<&-): unreadable, like a missing file.
+            raise OSError(errno.EBADF, "standard input is closed")
         stream = getattr(sys.stdin, "buffer", None)
         return sys.stdin.read() if stream is None else _decode(stream.read())
     with open(name, "rb") as handle:
@@ -104,14 +122,19 @@ def _decode(data: bytes) -> str:
 
 
 def _write(stream: TextIO | None, text: str) -> None:
+    _put(stream, text + "\n")
+
+
+def _put(stream: TextIO | None, text: str) -> None:
     if stream is None:
         return  # started with the stream closed (>&-), so there is nobody to tell
     raw = getattr(stream, "buffer", None)
     if raw is None:
-        stream.write(text + "\n")
+        stream.write(text)
+        stream.flush()
         return
     stream.flush()
-    raw.write(text.encode("utf-8", errors="surrogateescape") + b"\n")
+    raw.write(text.encode("utf-8", errors="surrogateescape"))
     raw.flush()
 
 

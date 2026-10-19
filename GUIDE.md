@@ -200,7 +200,11 @@ to standard error as `FILE:LINE: reason`. The exit status is 0 when every line i
 when a line is broken and 2 when a file cannot be read or the arguments are wrong. When
 the reader stops early (`authkeyline FILE | head -1`, or `2>&1 | head -1`), the command
 ends quietly with the status it had so far, which already counts the line it was
-reporting; a stream that was closed before the start (`>&-`) is skipped the same way.
+reporting; an output stream that was closed before the start (`>&-`, `2>&-`) is skipped
+the same way. The help and usage messages follow the same rules, so `--help | head -0`
+exits 0 and a usage error into a closed pipe exits 2. Standard input closed before the
+start (`<&-`) is a file that cannot be read: `authkeyline: -: standard input is closed`
+and status 2, after the files before it have been listed.
 
 ## Stability
 
