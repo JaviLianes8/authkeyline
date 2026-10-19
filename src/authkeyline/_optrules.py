@@ -34,7 +34,8 @@ _DIGITS = re.compile(r"[0-9]+\Z")
 _STRTONUM = re.compile(r"[ \t\n\v\f\r]*([+-]?)([0-9]+)\Z")
 # Characters that stand for one undecodable byte of a file read with surrogateescape.
 _ESCAPED_BYTE = re.compile("[\udc80-\udcff]")
-_TIME_RANGES = ((4, 6, 1, 12), (6, 8, 1, 31), (8, 10, 0, 23), (10, 12, 0, 59), (12, 14, 0, 60))
+# The field ranges strptime accepts for %m %d %H %M %S (seconds up to 61, in glibc and OpenBSD).
+_TIME_RANGES = ((4, 6, 1, 12), (6, 8, 1, 31), (8, 10, 0, 23), (10, 12, 0, 59), (12, 14, 0, 61))
 
 
 def flag_name(name: str) -> str | None:

@@ -142,7 +142,7 @@ def test_tunnel_rejects_others(value: str) -> None:
 
 @pytest.mark.parametrize(
     "value",
-    ["20301231", "20301231Z", "203012312359", "20301231235960z", "20301231UTC", "20300101utc"],
+    ["20301231", "20301231Z", "203012312359", "20301231235961z", "20301231UTC", "20300101utc"],
 )
 def test_expiry_time_accepts_the_sshd_formats(value: str) -> None:
     assert options(f'expiry-time="{value}"')[0].value == value
@@ -160,7 +160,7 @@ def test_expiry_time_accepts_the_sshd_formats(value: str) -> None:
         "20301232",
         "203012312400",
         "203012312360",
-        "20301231235961",
+        "20301231235962",
         "Z",
         "2030123100Z",
     ],
