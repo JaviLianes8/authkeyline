@@ -15,7 +15,7 @@ Progress:
 - [x] Docs: README, GUIDE, CHANGELOG (items 11, 12)
 - [x] Packaging, e2e and every Python (items 8, 10, 13, 14)
 - [x] Gates (item 15)
-- [ ] Five QA lenses (item 19) and independent reviewer (item 16)
+- [ ] Five QA lenses (item 19) and independent reviewer (item 16): round 1 findings fixed, awaiting re-verification
 - [x] PR #3 and trace guard CLEAN (item 17); merge and publish left to the maintainer
 
 ## Scorecard
@@ -142,7 +142,43 @@ built there, and the opt-in wheel test) all exit 0. On this PC from a fresh clon
 
 ## QA lenses (item 19)
 
-Pending.
+Five fresh reviewers, one per lens, ran against `release/1.0.0` at 2f246bb. Lens a also
+confirmed 18 doctests, every README and GUIDE example, the gates, a typed consumer, every
+documented refusal and the "why" claims; lens b replayed sshd's own checks on about 76,000
+seeded lines and found every field sshd keeps in agreement.
+
+### Round 1 findings
+
+| Lens | Id | Finding | Fix |
+| --- | --- | --- | --- |
+| a | A1 | Hand-built record: unknown key type quoted in full by `public_key()`, `fingerprint()` | `shown()` in the type check; `test_qa_records.py` |
+| a, b | A2, B3 | Listing printed `no comment` where `ssh-keygen -l` shows the options field, and differed in other comment cases | Comment column worked out as `do_fingerprint` does (`_listing.py`); `test_qa_cli.py`, `test_oracle_listing.py` |
+| a, c, d | A3, F3, F1 | Listing wrote control bytes and bytes that are not UTF-8 raw; `ssh-keygen` escapes them | Octal escapes as `mprintf` writes them; same tests; README and GUIDE reworded |
+| a, c | A4, F5 | Wrong field types gave `AttributeError` or misleading errors | Every method checks the record like `build_line` and raises `TypeError`; `test_qa_records.py` |
+| a | A5 | `PublicKey.blob` and `plain_blob` undocumented | README table, docstring, GUIDE |
+| a | A6 | Certificate example command missed `-V` | Docstring names the `-V` used and pins the validity in a doctest |
+| a | A7 | Public names reported private modules, so pickles named them | Names published as `authkeyline.*`; pickle round trip test |
+| a | A8 | `-E` had no help; status 2 also means a usage error | Help text, epilog, README and GUIDE |
+| a | A9 | Old CHANGELOG versions undated | 0.2.0 dated 2026-10-14, 0.1.0 2026-10-11 |
+| b | B1 | glibc sshd skips blanks before an `expiry-time` field | Listed as a deliberate difference in README and GUIDE (the library follows OpenBSD) |
+| b | B2 | A local `expiry-time` on the epoch in the server's zone is refused by that sshd | Listed as a deliberate difference in README and GUIDE (the zone is unknown) |
+| c | F1 | Same as A1 | As A1 |
+| c | F2 | `no-pty, environment="..."` leaked the value through "unsupported key type" | A key type holding `=` or `"` is not quoted; `test_qa_records.py` |
+| c, d | F4, F2 | `| head` gave a traceback and status 120 | Broken pipe ends quietly with the status so far; subprocess test |
+| c | F6 | `str` subclasses could steer `build_line`'s checks | Records copied to plain `str` before any check |
+| d | F3 | The sdist `.c` check could never fail | Names read with `tarfile`, exact set asserted |
+| d | F4 | `--json` wrote lone surrogates | Valid Unicode with U+FFFD, plus `line_base64` when a byte was replaced |
+| e | F1 to F13 | 13 mutants survived (M15, M24, M53, M78, M08, M42, M50, M74, M73, M84, M87, M39, M71) | One contract each in `test_qa_contracts.py`, `test_qa_cli.py`, `test_qa_records.py` |
+
+Every behaviour test was first run against 2f246bb and failed there (36 cases). The
+lens e contracts pin behaviour that was already right, so each of the 13 mutants was
+rebuilt on a copy of the fixed tree and its new contract run against it: all 13 killed.
+The listing oracle passed against OpenSSH_10.3p1 (portable, escaping branch on) and
+OpenSSH_for_Windows_9.5p2. No finding was disputed. Lens a's note on `requires-python`
+(3.10 while the house template says 3.9) was left to lens d, which raised nothing: 3.9 is
+past its end of life and every supported version from 3.10 up was run.
+
+Fix commit: see the commit that adds this section and the one after it.
 
 ## Independent review (item 16)
 

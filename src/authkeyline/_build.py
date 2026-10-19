@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from ._codec import parse_line
-from ._errors import AuthKeyError, shown, type_name
+from ._errors import AuthKeyError, shown, unsupported_type
 from ._keytypes import KEY_TYPES
-from ._model import AuthorizedKey, KeyOption
+from ._model import AuthorizedKey, KeyOption, plain
 from ._optrules import VALUED, flag_name
 
 
@@ -17,7 +17,8 @@ def build_line(key: AuthorizedKey) -> str:
     them, so a written line keeps to plain text), and the result must parse back to the
     same record. Raises :class:`AuthKeyError` for any of those, and ``TypeError`` when
     ``key`` is not an :class:`AuthorizedKey` or one of its fields has the wrong type
-    (``options`` must be a tuple of :class:`KeyOption`).
+    (``options`` must be a tuple of :class:`KeyOption`). ``str`` subclasses are read as
+    plain text, and the line returned is a plain ``str``.
 
     >>> from authkeyline import AuthorizedKey, KeyOption, build_line
     >>> blob = "AAAAC3NzaC1lZDI1NTE5AAAAIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f"
@@ -25,9 +26,9 @@ def build_line(key: AuthorizedKey) -> str:
     >>> build_line(key) == f"restrict ssh-ed25519 {blob} ci"
     True
     """
-    _check_types(key)
+    key = plain(key)
     if key.key_type not in KEY_TYPES:
-        raise AuthKeyError(f"unsupported key type {shown(key.key_type)}")
+        raise unsupported_type(key.key_type)
     if not key.key_base64 or any(char in key.key_base64 for char in " \t\r\n\0"):
         raise AuthKeyError("key blob must be one base64 word")
     fields = []
@@ -42,23 +43,6 @@ def build_line(key: AuthorizedKey) -> str:
     if parse_line(line) != key:
         raise AuthKeyError("the record does not read back the same; check the fields' spacing")
     return line
-
-
-def _check_types(key: object) -> None:
-    if not isinstance(key, AuthorizedKey):
-        raise TypeError(f"key must be an AuthorizedKey, not {type_name(key)}")
-    for field in ("key_type", "key_base64", "comment"):
-        if not isinstance(getattr(key, field), str):
-            raise TypeError(f"{field} must be a str, not {type_name(getattr(key, field))}")
-    if not isinstance(key.options, tuple):
-        raise TypeError(f"options must be a tuple, not {type_name(key.options)}")
-    for option in key.options:
-        if not isinstance(option, KeyOption):
-            raise TypeError(f"options must hold KeyOption items, not {type_name(option)}")
-        if not isinstance(option.name, str):
-            raise TypeError(f"an option name must be a str, not {type_name(option.name)}")
-        if option.value is not None and not isinstance(option.value, str):
-            raise TypeError(f"an option value must be a str or None, not {type_name(option.value)}")
 
 
 def _build_option(option: KeyOption) -> str:

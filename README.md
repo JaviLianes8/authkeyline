@@ -121,8 +121,15 @@ authkeyline --check authorized_keys          # only report broken lines
 ```
 
 Broken lines go to standard error as `FILE:LINE: reason` and the exit status is 1; a file
-that cannot be read gives status 2. The listing matches `ssh-keygen -l` byte for byte,
-comments in any encoding included (the test suite compares them).
+that cannot be read, or a wrong argument, gives status 2. The listing prints each key as
+portable OpenSSH's `ssh-keygen -l` does in a UTF-8 locale: the options field stands in for
+a missing comment, a comment starting with `#` is not shown, the comment stops at a CR and
+keeps its trailing blanks, and control characters and bytes that are not UTF-8 are written
+as `\ooo` octal escapes, so a hostile comment cannot send escape sequences to a terminal.
+The test suite compares this with `ssh-keygen` 10.3p1, and it was checked against 10.2p1
+on Linux. Two differences remain: the Windows port of OpenSSH (9.5p2) writes control bytes
+as they are, and a line sshd uses but `ssh-keygen` cannot read (two blanks after the
+options) is still listed.
 
 ## API
 
@@ -134,11 +141,11 @@ comments in any encoding included (the test suite compares them).
 | `build_line(key)` | A record back to a line that reads back the same, or `AuthKeyError` |
 | `AuthorizedKey` | `options`, `key_type`, `key_base64`, `comment`; `public_key()`, `fingerprint()`, `values()`, `has_flag()`, `environment()`, `key_bytes()` |
 | `KeyOption` | `name` as written and `value` (`None` for a flag) |
-| `PublicKey` | `key_type`, `short_type`, `bits`, `application`, `certificate`, `fingerprint()` |
+| `PublicKey` | `key_type`, `short_type`, `bits`, `blob` (the decoded blob), `plain_blob` (the bare key a fingerprint hashes), `application`, `certificate`, `fingerprint()` |
 | `Certificate` | `cert_type`, `serial`, `key_id`, `principals`, validity, critical options, extensions, `ca_key`, `signature_type` |
 | `LineProblem` | `line` number and `message` |
 | `KEY_TYPES` | The key type names sshd accepts, certificates included |
-| `AuthKeyError` | A `ValueError` with `reason` and `line`; arguments of the wrong type raise `TypeError` |
+| `AuthKeyError` | A `ValueError` with `reason` and `line`; arguments and record fields of the wrong type raise `TypeError` |
 
 ## Rules it follows
 
@@ -156,6 +163,12 @@ purpose:
 - Ports given by service name in `permitopen` and `permitlisten` (`host:ssh`) are refused,
   since sshd looks them up in the local services database, which differs per system.
 - `from=` patterns are kept as text, not matched against a client.
+- `expiry-time` must be digits only. sshd built on glibc also takes blanks before a field
+  (`"2025 101"`), because glibc's `strptime` skips them; OpenBSD's does not, and the
+  library follows the stricter reading.
+- An `expiry-time` without `Z` or `UTC` is local time on the server. sshd refuses one that
+  falls on the epoch in its own time zone; the library cannot know that zone, so it only
+  refuses the UTC epoch.
 - Trailing spaces, tabs and CR are dropped from the comment, so files with CRLF line ends
   read cleanly; sshd keeps them, and they change nothing.
 - `build_line` keeps comments and values to one line of text without NUL or CR.

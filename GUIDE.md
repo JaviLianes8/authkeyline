@@ -59,7 +59,11 @@ Names are compared without case and kept as written in `KeyOption.name`.
 - `tunnel="N"` is a device number up to 2,147,483,645 or `any`.
 - `expiry-time` is `YYYYMMDD`, `YYYYMMDDHHMM` or `YYYYMMDDHHMMSS`, local time or UTC with
   a final `Z` or `UTC`; the fields must be in range (seconds up to 61, as `strptime`
-  allows), and the UTC epoch itself is refused, as sshd refuses a zero expiry.
+  allows), and the UTC epoch itself is refused, as sshd refuses a zero expiry. Two cases
+  depend on the server, so the library takes a fixed side: the value must be digits only,
+  although sshd built on glibc also skips blanks before a field (`"2025 101"`), and a
+  local time that falls on the epoch in the server's time zone is accepted, although that
+  sshd refuses it.
 - An empty element between commas is skipped; a comma followed by a space ends the field.
 - sshd's count limits apply, counted as sshd counts them: `SSH_AUTHOPT_ENV_MAX` (1,024)
   environment names and `SSH_AUTHOPT_PERMIT_MAX` (4,096) `permitopen` and `permitlisten`
@@ -89,7 +93,9 @@ named curve. A certificate's signature type must fit its CA key, but the signatu
 is not verified, which is the one check sshd makes that the library does not.
 
 Fingerprints are computed over the bare key, as `ssh-keygen -l` does, so a certificate
-has the fingerprint of the key it certifies.
+has the fingerprint of the key it certifies. `PublicKey.blob` holds the decoded blob as
+written on the line and `PublicKey.plain_blob` that bare key, the bytes the fingerprint
+hashes.
 
 ```python
 from authkeyline import parse_line
@@ -138,7 +144,11 @@ and `line` the 1-based line number when it comes from `parse_file` (the message 
 starts with `line N: `); `check_file` returns the same reasons as `LineProblem` items.
 Messages quote at most 40 characters of any value taken from the input, with the full
 length when they cut it, and never quote the value of an `environment` option, which may
-hold a secret. Arguments of the wrong type raise `TypeError`.
+hold a secret. When a blank after a comma ends the options field early
+(`no-pty, environment="..."`), the next option sits where the key type goes; a key type
+holding `=` or `"` is therefore not quoted at all. Arguments of the wrong type raise
+`TypeError`, and so do the methods of a hand-built `AuthorizedKey` whose fields have the
+wrong type. A `str` subclass is read as plain text.
 
 ```python
 from authkeyline import AuthKeyError, parse_file
@@ -156,11 +166,28 @@ except AuthKeyError as error:
 
 `authkeyline [FILE ...]` (or `python -m authkeyline`) reads the files, or standard input
 for `-` or no file. Without options it prints `bits fingerprint comment (TYPE)` for every
-key, exactly as `ssh-keygen -l -f FILE` does; `-E md5` switches the hash, `--json` prints
-the options, sizes and certificate details, `--check` prints nothing but the broken lines.
-Broken lines go to standard error as `FILE:LINE: reason`. The exit status is 0 when every
-line is fine, 1 when a line is broken and 2 when a file cannot be read. Bytes that are not
-UTF-8 are written back as they were read.
+key sshd would use, as portable OpenSSH's `ssh-keygen -l -f FILE` prints it in a UTF-8
+locale:
+
+- the comment is the text after the blob up to the first CR, trailing blanks kept; when
+  there is none, or it starts with `#`, the options field is shown instead, and without
+  options `no comment`;
+- control characters, unassigned code points, U+2028, U+2029 and bytes that are not UTF-8
+  are written as `\ooo` octal escapes of their bytes (tabs stay), so a comment cannot
+  send escape sequences to the terminal.
+
+Two differences remain on purpose: the Windows port of OpenSSH writes control bytes as
+they are, and a line that sshd uses but `ssh-keygen` cannot read (two blanks after the
+options, a CR inside the options or the blob) is listed all the same.
+
+`-E md5` switches the hash, for the certificate authority's fingerprint too. `--json`
+prints the options, sizes and certificate details; its text is valid Unicode, a byte that
+is not UTF-8 becomes U+FFFD, and an entry where that happened also carries `line_base64`,
+the exact bytes of the line. `--check` prints nothing but the broken lines. Broken lines go
+to standard error as `FILE:LINE: reason`. The exit status is 0 when every line is fine, 1
+when a line is broken and 2 when a file cannot be read or the arguments are wrong. When
+the reader stops early (`authkeyline FILE | head -1`), the command ends quietly with the
+status it had so far.
 
 ## Stability
 

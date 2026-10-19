@@ -29,15 +29,36 @@ suite checks by running that code on 12,000 seeded lines.
   certificate key id and principals) are read as `sshbuf_get_cstring` reads them: one
   final NUL is allowed and dropped, a NUL before the end is refused.
 - A blob longer than OpenSSH's 128 MiB buffer is refused before it is decoded.
+- The methods of `AuthorizedKey` (`public_key`, `fingerprint`, `key_bytes`, `values`,
+  `has_flag`, `environment`) check the fields of a hand-built record as `build_line`
+  does and raise `TypeError` for one of the wrong type, instead of an `AttributeError`,
+  an unrelated `TypeError` or an `AuthKeyError`. `str` subclasses in any field or
+  argument are read as plain text, and `build_line` checks and returns plain text.
+- An unknown key type of a hand-built record is quoted to 40 characters like every other
+  value. A key type holding `=` or `"`, which is what a blank after a comma leaves where
+  the key type goes (`no-pty, environment="..."`), is not quoted at all, so the value of
+  that option cannot reach the message.
+- The public names report `authkeyline` as their module, so pickles and reprs never name
+  a private module.
+- Command line: the listing shows the comment column as portable `ssh-keygen -l` does in
+  a UTF-8 locale. The options field stands in for a missing comment, a comment starting
+  with `#` is not shown, trailing blanks are kept, and control characters and bytes that
+  are not UTF-8 are written as `\ooo` octal escapes instead of raw bytes, so a comment
+  cannot send escape sequences to a terminal.
+- Command line: `--json` writes valid Unicode. A byte that is not UTF-8 becomes U+FFFD,
+  and such an entry also carries `line_base64`, the exact bytes of the line.
+- Command line: when the reader closes the pipe early (`| head`), the command ends
+  quietly with the status it had instead of a traceback.
 
 ### Added
 
 - Runnable examples in the docstring of every public name, run as doctests.
 - `GUIDE.md`, the rules in detail.
+- Help text for `-E`, and the exit statuses in `--help`; status 2 also covers usage errors.
 - `scripts/sshd-oracle/`: OpenSSH's own reading code behind a small harness, and a test
   that compares the library with it when `AUTHKEYLINE_SSHD_HARNESS` is set.
 
-## [0.2.0]
+## [0.2.0] - 2026-10-14
 
 ### Fixed
 
@@ -71,7 +92,7 @@ suite checks by running that code on 12,000 seeded lines.
   status 1 for broken lines and 2 for unreadable files.
 
 
-## [0.1.0]
+## [0.1.0] - 2026-10-11
 
 - Parse one `authorized_keys` line into an `AuthorizedKey` with `parse_line`.
 - Build a line back from a record with `build_line`.

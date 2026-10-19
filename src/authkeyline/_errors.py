@@ -38,6 +38,17 @@ def shown(text: str) -> str:
     return f"{text[:SHOWN]!r}... ({len(text)} characters)"
 
 
+def unsupported_type(word: str) -> AuthKeyError:
+    """The error for an unknown key type; a word that looks like an option is not quoted."""
+    # In "no-pty, environment=..." the blank ends the options field, so the next option is
+    # read where the key type goes, and its value may be a secret.
+    if "=" in word or '"' in word:
+        return AuthKeyError(
+            "unsupported key type (it looks like an option; a blank ends the options)"
+        )
+    return AuthKeyError(f"unsupported key type {shown(word)}")
+
+
 def type_name(value: object) -> str:
     """The name of the type of ``value``, cut to 40 characters."""
     name = type(value).__name__

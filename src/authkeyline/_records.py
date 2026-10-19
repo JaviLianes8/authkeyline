@@ -20,7 +20,8 @@ class Certificate:
     forever); names in ``critical_options`` and ``extensions`` are decoded as UTF-8 with
     replacement characters, their data is kept as bytes.
 
-    A user certificate made by ``ssh-keygen -s ca -I ops -n alice,deploy -z 42 -O no-pty``:
+    A user certificate made by ``ssh-keygen -s ca -I ops -n alice,deploy -z 42 -O no-pty
+    -V 20260101:20270101`` in a UTC+1 time zone:
 
     >>> from authkeyline import parse_line
     >>> CERT = (
@@ -36,6 +37,8 @@ class Certificate:
     >>> cert = parse_line(f"ssh-ed25519-cert-v01@openssh.com {CERT}").public_key().certificate
     >>> cert.cert_type, cert.serial, cert.key_id, cert.principals
     ('user', 42, 'ops', ('alice', 'deploy'))
+    >>> cert.valid_after, cert.valid_before
+    (1767222000, 1798758000)
     >>> [name for name, _ in cert.extensions][:2], cert.signature_type
     (['permit-X11-forwarding', 'permit-agent-forwarding'], 'ssh-ed25519')
     >>> cert.ca_key.fingerprint()
@@ -59,8 +62,9 @@ class PublicKey:
     """A decoded key blob.
 
     ``key_type`` is the name inside the blob, ``short_type`` the label ssh-keygen prints
-    (``ED25519``, ``RSA-CERT``), ``bits`` the size ssh-keygen prints. ``plain_blob`` is the
-    blob of the bare key that a fingerprint is computed over, also for a certificate.
+    (``ED25519``, ``RSA-CERT``), ``bits`` the size ssh-keygen prints. ``blob`` is the whole
+    decoded blob as written on the line; ``plain_blob`` is the blob of the bare key that a
+    fingerprint is computed over, also for a certificate.
     ``application`` is the security key application (``ssh:`` by default) of the ``sk-``
     types, ``certificate`` the body of a certificate; both are ``None`` otherwise.
 

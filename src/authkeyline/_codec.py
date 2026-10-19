@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from ._errors import AuthKeyError, require_str, shown
+from ._errors import AuthKeyError, require_str, unsupported_type
 from ._keytypes import KEY_TYPES
 from ._model import AuthorizedKey, KeyOption
 from ._options import read_options
@@ -59,7 +59,7 @@ def parse_line(line: str) -> AuthorizedKey:
     if not key_type:
         raise AuthKeyError("missing key type")
     if key_type not in KEY_TYPES:
-        raise AuthKeyError(f"unsupported key type {shown(key_type)}")
+        raise unsupported_type(key_type)
     rest = text[len(key_type) :].lstrip(_BLANK)
     blob = _first_field(rest)
     if not blob:

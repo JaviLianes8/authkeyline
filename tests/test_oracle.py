@@ -9,9 +9,11 @@ from __future__ import annotations
 import base64
 import contextlib
 import io
+import os
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 from keyfactory import b64, blob, ec_point, fields, mpint, string
@@ -19,19 +21,23 @@ from keyfactory import b64, blob, ec_point, fields, mpint, string
 from authkeyline import AuthKeyError, parse_line
 from authkeyline._cli import main
 
-KEYGEN = shutil.which("ssh-keygen")
+# AUTHKEYLINE_SSH_KEYGEN picks a build, such as portable OpenSSH next to the Windows port.
+KEYGEN = os.environ.get("AUTHKEYLINE_SSH_KEYGEN") or shutil.which("ssh-keygen")
 pytestmark = pytest.mark.skipif(KEYGEN is None, reason="ssh-keygen is not on the PATH")
 
 
-def keygen(*args: str | Path) -> subprocess.CompletedProcess[str]:
+def keygen(
+    *args: str | Path, env: dict[str, str] | None = None, binary: bool = False
+) -> subprocess.CompletedProcess[Any]:
     assert KEYGEN is not None
     return subprocess.run(
         [KEYGEN, *map(str, args)],
         stdin=subprocess.DEVNULL,
         capture_output=True,
-        text=True,
+        text=not binary,
         check=False,
         timeout=120,
+        env=None if env is None else {**os.environ, **env},
     )
 
 

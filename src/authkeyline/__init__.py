@@ -12,6 +12,9 @@ and the ``rsa-sha2-256`` and ``rsa-sha2-512`` aliases of RSA included:
 
 from __future__ import annotations
 
+import inspect
+import typing
+
 from ._build import build_line
 from ._codec import LineProblem, check_file, parse_file, parse_line
 from ._errors import AuthKeyError
@@ -36,3 +39,22 @@ __all__ = [
     "parse_file",
     "parse_line",
 ]
+
+
+def _publish() -> None:
+    """Make the package the home of every public name, so pickles never name a private module."""
+    for name in __all__:
+        target = globals()[name]
+        if isinstance(target, type):
+            # Resolve the annotations while their defining module is still the one named.
+            hints = typing.get_type_hints(target)
+            own = {field: hints[field] for field in inspect.get_annotations(target)}
+            target.__annotations__ = own
+            for member in vars(target).values():
+                if inspect.isfunction(member):
+                    member.__module__ = __name__
+        if isinstance(target, type) or inspect.isfunction(target):
+            target.__module__ = __name__
+
+
+_publish()
