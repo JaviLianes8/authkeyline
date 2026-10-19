@@ -134,7 +134,11 @@ At ba24013 on this PC, from a fresh clone, one process at a time:
 
 ## Gates (item 15)
 
-Pending the final run.
+At 0373b42 on another machine from a fresh clone (CPython 3.14, fetched sources), each
+command on its own: `ruff format --check .`, `ruff check .`, `mypy --strict src`,
+`mypy --strict src tests` and `pytest` (363 passed, 6 skipped: the sshd oracle, not
+built there, and the opt-in wheel test) all exit 0. On this PC from a fresh clone at
+0373b42 with the sshd oracle and `AUTHKEYLINE_E2E=1`: 369 passed, nothing skipped.
 
 ## QA lenses (item 19)
 
