@@ -85,7 +85,7 @@ def test_a_line_that_starts_with_a_key_type_has_no_options() -> None:
         ("no-pty", "missing key type"),
         ("no-pty ", "missing key type"),
         ("no-pty ssh-foo AAAA", "unsupported key type"),
-        ("ssh-dss AAAA", "unknown option"),
+        ("ssh-dss AAAA", "unsupported key type 'ssh-dss'"),
         ("ssh-ed25519 AAAA\0 x", "truncated"),
         ("ssh-ed25519 AAAA x\ny", "more than one line"),
         ("ssh-ed25519 not+base64!!", "not valid base64"),

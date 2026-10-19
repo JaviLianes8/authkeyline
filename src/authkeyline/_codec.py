@@ -14,6 +14,8 @@ _BLANK = " \t"
 _FIELD_END = re.compile("[ \t]")
 # isspace() in the C locale: a line holding nothing else is blank.
 _C_SPACE = " \t\n\v\f\r"
+_OPTION_MARKS = frozenset('=",')
+_BASE64 = re.compile("[A-Za-z0-9+/]+={0,2}")
 
 
 @dataclass(frozen=True)
@@ -53,7 +55,11 @@ def parse_line(line: str) -> AuthorizedKey:
     text = text.rstrip(" \t\r")
     options: tuple[KeyOption, ...] = ()
     if _first_field(text) not in KEY_TYPES:
-        options, end = read_options(text)
+        try:
+            options, end = read_options(text)
+        except AuthKeyError:
+            _refuse_as_key_type(text)
+            raise
         text = text[end:].lstrip(_BLANK)
     key_type = _first_field(text)
     if not key_type:
@@ -111,6 +117,18 @@ def check_file(text: str) -> list[LineProblem]:
 def _content(line: str) -> str:
     """The part of a line sshd looks at: up to a NUL, after leading spaces and tabs."""
     return line.split("\0", 1)[0].lstrip(_BLANK)
+
+
+def _refuse_as_key_type(text: str) -> None:
+    """Name an unknown key type (``ssh-dss BLOB``) as one, not as an unknown option.
+
+    sshd reads such a word as an option and refuses the line either way; only the reason
+    changes. A word holding ``=``, ``"`` or ``,`` is an options field and is left to it.
+    """
+    word = _first_field(text)
+    blob = _first_field(text[len(word) :].lstrip(_BLANK))
+    if not _OPTION_MARKS.intersection(word) and _BASE64.fullmatch(blob):
+        raise unsupported_type(word)
 
 
 def _first_field(text: str) -> str:

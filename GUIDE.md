@@ -146,7 +146,10 @@ Messages quote at most 40 characters of any value taken from the input, with the
 length when they cut it, and never quote the value of an `environment` option, which may
 hold a secret. When a blank after a comma ends the options field early
 (`no-pty, environment="..."`), the next option sits where the key type goes; a key type
-holding `=` or `"` is therefore not quoted at all. Arguments of the wrong type raise
+holding `=` or `"` is therefore not quoted at all. A line that starts with an unknown key
+type and no options (`ssh-dss BLOB`) is refused as sshd refuses it, as an options field it
+cannot read, but the reason names the key type: `unsupported key type 'ssh-dss'`.
+Arguments of the wrong type raise
 `TypeError`, and so do the methods of a hand-built `AuthorizedKey` whose fields have the
 wrong type. A `str` subclass is read as plain text.
 

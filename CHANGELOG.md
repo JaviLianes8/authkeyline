@@ -41,6 +41,13 @@ suite checks by running that code on 12,000 seeded lines.
 - The "key blob is not valid base64" and "not canonical base64" messages no longer quote
   a blob field that holds `"` or an `=` before the padding: that is an option written
   where the blob goes (`ssh-ed25519 environment="..."`), and its value may be a secret.
+- An unknown key type at the start of a line without options (`ssh-dss BLOB`, a typo in
+  the type name) is reported as `unsupported key type 'ssh-dss'` instead of
+  `unknown option 'ssh-dss'`: when the first word cannot be an options field and the next
+  field looks like a base64 blob, the word is named as a key type. The line is refused
+  either way, as sshd refuses it.
+- Both `fingerprint` methods compare a plain copy of `hash`, so a `str` subclass cannot
+  pick a hash it does not name.
 - The public names report `authkeyline` as their module, so pickles and reprs never name
   a private module.
 - Command line: the listing shows the comment column as portable `ssh-keygen -l` does in

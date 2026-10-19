@@ -94,10 +94,12 @@ class PublicKey:
         >>> parse_line(f"ssh-ed25519 {blob}").public_key().fingerprint("md5")
         'MD5:0f:a2:0a:d7:38:3e:65:45:08:6b:63:84:1c:ff:dc:ba'
         """
-        if require_str(hash, "hash") == "sha256":
+        # A plain copy, so a str subclass cannot steer the comparison.
+        chosen = require_str(hash, "hash")
+        if chosen == "sha256":
             digest = hashlib.sha256(self.plain_blob).digest()
             return "SHA256:" + base64.b64encode(digest).decode("ascii").rstrip("=")
-        if hash == "md5":
+        if chosen == "md5":
             digest = hashlib.md5(self.plain_blob, usedforsecurity=False).digest()
             return "MD5:" + ":".join(f"{byte:02x}" for byte in digest)
-        raise AuthKeyError(f"unknown fingerprint hash {shown(hash)}, use 'sha256' or 'md5'")
+        raise AuthKeyError(f"unknown fingerprint hash {shown(chosen)}, use 'sha256' or 'md5'")
