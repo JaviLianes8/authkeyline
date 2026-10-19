@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ._errors import AuthKeyError
+from ._errors import AuthKeyError, shown
 from ._model import KeyOption
 from ._optrules import (
     ENV_MAX,
@@ -31,7 +31,7 @@ def read_options(text: str) -> tuple[tuple[KeyOption, ...], int]:
             if pos == len(text) or text[pos] in _END:
                 break
             if text[pos] != ",":
-                raise AuthKeyError(f"unexpected {text[pos]!r} after option {option.name!r}")
+                raise AuthKeyError(f"unexpected {text[pos]!r} after option {shown(option.name)}")
         pos += 1
         if pos == len(text):
             raise AuthKeyError("options end with a comma")
@@ -46,18 +46,18 @@ def _read_one(text: str, pos: int) -> tuple[KeyOption, int]:
     name = text[pos:end]
     if end < len(text) and text[end] == "=":
         if name.lower() not in VALUED:
-            raise AuthKeyError(f"unknown option {name!r}" if name else "empty option name")
+            raise AuthKeyError(f"unknown option {shown(name)}" if name else "empty option name")
         value, end = dequote(text, end + 1, name)
         return KeyOption(name, value), end
     if flag_name(name) is None:
-        raise AuthKeyError(f"unknown option {name!r}" if name else f"unexpected {text[pos]!r}")
+        raise AuthKeyError(f"unknown option {shown(name)}" if name else f"unexpected {text[pos]!r}")
     return KeyOption(name), end
 
 
 def dequote(text: str, pos: int, name: str) -> tuple[str, int]:
     """opt_dequote: a backslash escapes only a double quote and is otherwise kept."""
     if pos >= len(text) or text[pos] != '"':
-        raise AuthKeyError(f"value of {name!r} must be in double quotes")
+        raise AuthKeyError(f"value of {shown(name)} must be in double quotes")
     out: list[str] = []
     pos += 1
     while pos < len(text) and text[pos] != '"':
@@ -66,23 +66,19 @@ def dequote(text: str, pos: int, name: str) -> tuple[str, int]:
         out.append(text[pos])
         pos += 1
     if pos >= len(text):
-        raise AuthKeyError(f"value of {name!r} has no closing quote")
+        raise AuthKeyError(f"value of {shown(name)} has no closing quote")
     return "".join(out), pos + 1
 
 
 def check_options(options: list[KeyOption]) -> None:
-    """The rules across options: single-use names, value formats, sshd's count limits."""
+    """The rules across options read by :func:`read_options`: single use, formats, limits."""
     seen: set[str] = set()
     env_names: set[str] = set()
     permits = {"permitopen": 0, "permitlisten": 0}
     for option in options:
-        name = option.name.lower()
         if option.value is None:
-            if flag_name(name) is None:
-                raise AuthKeyError(f"option {option.name!r} needs a value")
-            continue
-        if name not in VALUED:
-            raise AuthKeyError(f"option {option.name!r} takes no value")
+            continue  # the reader only lets known flags through
+        name = option.name.lower()
         if name in SINGLE_VALUED and name in seen:
             raise AuthKeyError(f"option {name!r} appears more than once")
         seen.add(name)

@@ -6,7 +6,89 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
-## [0.2.0]
+## [1.0.0] - 2026-10-19
+
+The first release on PyPI. The public API (the names in `__all__`, their parameters, the
+fields of the records and the error types) is now stable and follows semantic
+versioning. Every line is read the way OpenSSH's own C code reads it, which the test
+suite checks by running that code on 12,000 seeded lines.
+
+### Changed
+
+- `expiry-time` accepts a seconds field of 61, as `strptime` in sshd does; 0.2.0 refused
+  it.
+- `build_line` raises `TypeError` for fields of the wrong type (`options` must be a tuple
+  of `KeyOption`, names and values text) instead of an `AttributeError` or a misleading
+  `AuthKeyError`. It now lives in its own private module; import it from `authkeyline`
+  as before.
+- `AuthorizedKey.values`, `AuthorizedKey.has_flag` and both `fingerprint` methods raise
+  `TypeError` for an argument that is not a `str`.
+- Error messages quote at most 40 characters of any value from the input, with its full
+  length when cut, and never the value of an `environment` option.
+- Text fields inside a key blob (type and curve names, the security key application,
+  certificate key id and principals) are read as `sshbuf_get_cstring` reads them: one
+  final NUL is allowed and dropped, a NUL before the end is refused.
+- A blob longer than OpenSSH's 128 MiB buffer is refused before it is decoded.
+- The methods of `AuthorizedKey` (`public_key`, `fingerprint`, `key_bytes`, `values`,
+  `has_flag`, `environment`) check the fields of a hand-built record as `build_line`
+  does and raise `TypeError` for one of the wrong type, instead of an `AttributeError`,
+  an unrelated `TypeError` or an `AuthKeyError`. `str` subclasses in any field or
+  argument are read as plain text, and `build_line` checks and returns plain text.
+- An unknown key type of a hand-built record is quoted to 40 characters like every other
+  value. A key type holding `=` or `"`, which is what a blank after a comma leaves where
+  the key type goes (`no-pty, environment="..."`), is not quoted at all, so the value of
+  that option cannot reach the message.
+- The "key blob is not valid base64" and "not canonical base64" messages no longer quote
+  a blob field that holds `"` or an `=` before the padding: that is an option written
+  where the blob goes (`ssh-ed25519 environment="..."`), and its value may be a secret.
+- An unknown key type at the start of a line without options (`ssh-dss BLOB`, a typo in
+  the type name) is reported as `unsupported key type 'ssh-dss'` instead of
+  `unknown option 'ssh-dss'`: when the first word cannot be an options field and the next
+  field looks like a base64 blob, the word is named as a key type. The line is refused
+  either way, as sshd refuses it.
+- Both `fingerprint` methods compare a plain copy of `hash`, so a `str` subclass cannot
+  pick a hash it does not name.
+- The public names report `authkeyline` as their module, so pickles and reprs never name
+  a private module.
+- Command line: the listing shows the comment column as portable `ssh-keygen -l` does in
+  a UTF-8 locale. The options field stands in for a missing comment, a comment starting
+  with `#` is not shown, trailing blanks are kept, and control characters and bytes that
+  are not UTF-8 are written as `\ooo` octal escapes instead of raw bytes, so a comment
+  cannot send escape sequences to a terminal.
+- Command line: `--json` writes valid Unicode. A byte that is not UTF-8 becomes U+FFFD,
+  and such an entry also carries `line_base64`, the exact bytes of the line.
+- Command line: when the reader closes the pipe early (`| head`), the command ends
+  quietly with the status it had instead of a traceback. The status of a broken or
+  unreadable file is set before its report is written, so `2>&1 | head` still exits 1
+  or 2, and an output stream closed before the start (`>&-`, `2>&-`) is skipped instead
+  of ending in a traceback. The help and usage messages follow the same rules: into a
+  closed pipe they exit 0 and 2 instead of 120, and a usage error with standard error
+  closed exits 2 on every supported Python (Python 3.10 gave 1) and writes nothing to
+  standard output (argparse used to send the usage line there).
+- Command line: a file name or argument holding a lone surrogate that is not an escaped
+  byte (possible on Windows, whose names are unchecked UTF-16) is written as `\udXXX`
+  in messages and in `--json`, instead of ending in a traceback with status 1. On Windows
+  this holds for every lone surrogate, U+DC80..U+DCFF included: such a name carries no
+  byte, so it is no longer written as a raw byte (U+FFFD in `--json`), and two names
+  that differ only there stay distinct. A name the file system cannot store (a NUL, or a
+  surrogate outside U+DC80..U+DCFF on POSIX) is a file that cannot be read:
+  `authkeyline: NAME: invalid file name`, status 2.
+- Command line: standard input closed before the start (`<&-`) is reported as a file
+  that cannot be read (`authkeyline: -: standard input is closed`, status 2) instead of a
+  traceback with status 1.
+- A blob field with padding that is too long or not at the end (`AAAA=`, `AAB==`) now
+  gives "key blob is not valid base64" on every supported Python; Python 3.10 and 3.11
+  said "not canonical base64" for some of them. Which lines are refused does not change.
+
+### Added
+
+- Runnable examples in the docstring of every public name, run as doctests.
+- `GUIDE.md`, the rules in detail.
+- Help text for `-E`, and the exit statuses in `--help`; status 2 also covers usage errors.
+- `scripts/sshd-oracle/`: OpenSSH's own reading code behind a small harness, and a test
+  that compares the library with it when `AUTHKEYLINE_SSHD_HARNESS` is set.
+
+## [0.2.0] - 2026-10-14
 
 ### Fixed
 
@@ -40,7 +122,7 @@ All notable changes to this project are documented here. The format follows
   status 1 for broken lines and 2 for unreadable files.
 
 
-## [0.1.0]
+## [0.1.0] - 2026-10-11
 
 - Parse one `authorized_keys` line into an `AuthorizedKey` with `parse_line`.
 - Build a line back from a record with `build_line`.

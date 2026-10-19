@@ -5,9 +5,11 @@ Slow and needs the build backend, so it runs only with AUTHKEYLINE_E2E=1.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
+import tarfile
 import venv
 import zipfile
 from pathlib import Path
@@ -16,6 +18,8 @@ import pytest
 from keyfactory import b64, blob, certificate, ed25519_line
 
 ROOT = Path(__file__).resolve().parents[1]
+MANIFEST = "tests/upstream/MANIFEST.json"
+HARNESS = "scripts/sshd-oracle/harness.c"
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("AUTHKEYLINE_E2E") != "1", reason="set AUTHKEYLINE_E2E=1 to build"
@@ -66,6 +70,7 @@ def test_installed_wheel_end_to_end(tmp_path: Path) -> None:
     built = _run(sys.executable, "-m", "build", "--outdir", dist, ROOT)
     assert built.returncode == 0, built.stderr
     (wheel,) = dist.glob("authkeyline-*.whl")
+    version = wheel.name.split("-")[1]
     (sdist,) = dist.glob("authkeyline-*.tar.gz")
     names = zipfile.ZipFile(wheel).namelist()
     assert "authkeyline/py.typed" in names and "authkeyline/__main__.py" in names
@@ -73,11 +78,15 @@ def test_installed_wheel_end_to_end(tmp_path: Path) -> None:
     entry_points = next(name for name in names if name.endswith("entry_points.txt"))
     text = zipfile.ZipFile(wheel).read(entry_points).decode()
     assert "authkeyline = authkeyline._cli:main" in text
-    listing = _run(sys.executable, "-m", "tarfile", "-l", sdist).stdout.decode()
-    assert "IMPROVEMENTS-round" not in listing and "sshd.8" not in listing
-    assert "tests/upstream/MANIFEST.json" in listing and "rfc" not in listing
-    assert not any(line.endswith((".c", ".h")) for line in listing.splitlines())
-    assert "tests/test_sources.py" in listing and "scripts/fetch_upstream.py" in listing
+    with tarfile.open(sdist) as archive:
+        # Paths inside the sdist, without its "authkeyline-<version>/" folder.
+        files = {name.split("/", 1)[1] for name in archive.getnames() if "/" in name}
+    assert not any(name.startswith(("IMPROVEMENTS-round", "CERT-1.0")) for name in files)
+    assert {"GUIDE.md", "LICENSE", "tests/upstream/MANIFEST.json"} <= files
+    assert {"tests/test_sources.py", "scripts/fetch_upstream.py"} <= files
+    assert not any(name.startswith("tests/upstream/") for name in files - {MANIFEST})
+    # Only the sshd oracle harness, our own code, ships as C; no fetched OpenSSH source does.
+    assert {name for name in files if name.endswith((".c", ".h"))} == {HARNESS}
 
     env_dir = tmp_path / "venv"
     venv.create(env_dir, with_pip=True)
@@ -104,3 +113,10 @@ def test_installed_wheel_end_to_end(tmp_path: Path) -> None:
         assert out.startswith("256 SHA256:") and out.rstrip().endswith("e2e key (ED25519)")
         failed = _run(*command, "--check", cwd=work, stdin=f"bogus {good}\n".encode())
         assert failed.returncode == 1 and b"-:1: unknown option 'bogus'" in failed.stderr
+        listed = _run(*command, "--json", "-E", "md5", cwd=work, stdin=f"{cert}\n".encode())
+        (entry,) = json.loads(listed.stdout)
+        assert entry["certificate"]["principals"] == ["alice"] and entry["line"] == 1
+        assert entry["fingerprint"].startswith("MD5:") and listed.returncode == 0
+    metadata = zipfile.ZipFile(wheel).read(f"authkeyline-{version}.dist-info/METADATA").decode()
+    assert "Classifier: Development Status :: 5 - Production/Stable" in metadata
+    assert "Requires-Dist" not in metadata.split("Provides-Extra")[0]

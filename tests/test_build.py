@@ -47,7 +47,7 @@ def test_without_options_or_comment() -> None:
         (KeyOption("command", "a\nssh-ed25519 AAAA"), "line break"),
         (KeyOption("command", "a\rb"), "line break"),
         (KeyOption("command", "a\0b"), "NUL"),
-        (KeyOption("environment", "bad name=1"), "environment="),
+        (KeyOption("environment", "bad name=1"), "environment name"),
         (KeyOption("permitopen", "nohost"), "permitopen"),
     ],
 )

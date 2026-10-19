@@ -96,14 +96,14 @@ def test_cli_reports_unreadable_files_with_status_2(
     assert out.rstrip().endswith("ok (ED25519)")
 
 
-def test_cli_writes_non_utf8_comments_back_byte_for_byte(
+def test_cli_escapes_non_utf8_comment_bytes_like_ssh_keygen(
     tmp_path: Path, capsysbinary: pytest.CaptureFixture[bytes]
 ) -> None:
     path = tmp_path / "keys"
     path.write_bytes(ed25519_line("caf").encode() + b"\xe9 \xff\n")
     assert main([str(path)]) == 0
     out = capsysbinary.readouterr().out
-    assert out.endswith(b" caf\xe9 \xff (ED25519)\n")
+    assert out.endswith(rb" caf\351 \377 (ED25519)" + b"\n")
 
 
 def test_cli_reads_stdin_as_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -116,7 +116,7 @@ def test_cli_reads_stdin_as_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(raw), encoding="ascii"))
     monkeypatch.setattr(sys, "stdout", Stream(out, encoding="ascii"))
     assert main([]) == 0
-    assert out.getvalue().endswith(b" n\xe9 (ED25519)\n")
+    assert out.getvalue().endswith(rb" n\351 (ED25519)" + b"\n")
 
 
 def test_rsa_ca_with_rsa_signature_names() -> None:

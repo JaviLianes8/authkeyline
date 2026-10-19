@@ -1,5 +1,7 @@
 # authkeyline
 
+[![Lianes8 Certified](https://lianes8studio.com/certified/lianes8-certified-badge.svg)](https://lianes8studio.com/certified)
+
 Parse, check and safely build OpenSSH `authorized_keys` lines into typed records,
 the way sshd reads them. Zero dependencies.
 
@@ -119,8 +121,21 @@ authkeyline --check authorized_keys          # only report broken lines
 ```
 
 Broken lines go to standard error as `FILE:LINE: reason` and the exit status is 1; a file
-that cannot be read gives status 2. The listing matches `ssh-keygen -l` byte for byte,
-comments in any encoding included (the test suite compares them).
+that cannot be read, or a wrong argument, gives status 2. The listing prints each key as
+portable OpenSSH's `ssh-keygen -l` does in a UTF-8 locale: the options field stands in for
+a missing comment, a comment starting with `#` is not shown, the comment stops at a CR and
+keeps its trailing blanks, and control characters and bytes that are not UTF-8 are written
+as `\ooo` octal escapes, so a hostile comment cannot send escape sequences to a terminal.
+The reference is `ssh-keygen` built on glibc (Linux), but the Unicode tables come from the
+running Python: a code point assigned after that Python's Unicode version is escaped, so
+the same file can list differently on another Python or C library (never for a control
+character). The test suite compares the comment column and the escaping of control bytes
+and bytes that are not UTF-8 with the `ssh-keygen` it finds (10.3p1 here), and the listing
+was checked against 10.2p1 on Linux. Other builds differ: the Windows port of OpenSSH
+(9.5p2) writes control bytes as they are, and the Cygwin and MSYS2 build (the one in Git
+for Windows) prints U+2028 and U+2029 as they are and escapes characters outside the Basic
+Multilingual Plane, such as emoji. A line sshd uses but `ssh-keygen` cannot read (two
+blanks after the options) is still listed.
 
 ## API
 
@@ -132,50 +147,69 @@ comments in any encoding included (the test suite compares them).
 | `build_line(key)` | A record back to a line that reads back the same, or `AuthKeyError` |
 | `AuthorizedKey` | `options`, `key_type`, `key_base64`, `comment`; `public_key()`, `fingerprint()`, `values()`, `has_flag()`, `environment()`, `key_bytes()` |
 | `KeyOption` | `name` as written and `value` (`None` for a flag) |
-| `PublicKey` | `key_type`, `short_type`, `bits`, `application`, `certificate`, `fingerprint()` |
+| `PublicKey` | `key_type`, `short_type`, `bits`, `blob` (the decoded blob), `plain_blob` (the bare key a fingerprint hashes), `application`, `certificate`, `fingerprint()` |
 | `Certificate` | `cert_type`, `serial`, `key_id`, `principals`, validity, critical options, extensions, `ca_key`, `signature_type` |
 | `LineProblem` | `line` number and `message` |
 | `KEY_TYPES` | The key type names sshd accepts, certificates included |
-| `AuthKeyError` | A `ValueError` with `reason` and `line` |
+| `AuthKeyError` | A `ValueError` with `reason` and `line`; arguments and record fields of the wrong type raise `TypeError` |
 
-## What it follows
+## Rules it follows
 
-- The options grammar and rules of OpenSSH's `sshauthopt_parse` and the option list of
-  sshd(8): case-insensitive names, quoted values, `no-` forms, single `command`,
-  `principals` and `from`, `permitopen` and `permitlisten` targets, `tunnel`,
-  `expiry-time`, `environment` (first value of a name wins).
-- The key type table of OpenSSH (`ssh-ed25519`, `sk-ssh-ed25519@openssh.com`,
-  `ecdsa-sha2-nistp256/384/521`, `sk-ecdsa-sha2-nistp256@openssh.com`, `ssh-rsa`,
-  `ssh-mldsa44-ed25519`, their certificates, and the `rsa-sha2-256/512` names that sshd
-  reads as RSA keys), the blob layouts of RFC 4253, RFC 5656 and RFC 8709, and the
-  certificate format of draft-miller-ssh-cert.
-- Fingerprints are computed over the bare key, as `ssh-keygen -l` does, so a certificate
-  has the fingerprint of its key.
-
-Where it differs from sshd, on purpose:
+Lines are read the way sshd's own authorized_keys loop reads them: the option grammar and
+rules of OpenSSH's `sshauthopt_parse`, the key type table of `sshkey.c` (certificates and
+the `rsa-sha2-256` and `rsa-sha2-512` aliases included), the blob layouts of RFC 4253,
+RFC 5656 and RFC 8709 and the certificate format of draft-miller-ssh-cert. The test suite
+compares the library with OpenSSH's own C code, built from a pinned commit, on 12,000
+seeded lines, and with `ssh-keygen -l` on fresh keys. Where it differs from sshd, on
+purpose:
 
 - Certificate signatures are not verified (that needs a crypto library), so a certificate
   with a forged signature parses while sshd skips it. The signature type is checked
-  against the CA key. Certificates are rare in `authorized_keys`; CA keys marked
-  `cert-authority` are plain keys and fully checked.
+  against the CA key. CA keys marked `cert-authority` are plain keys and fully checked.
+- Ports given by service name in `permitopen` and `permitlisten` (`host:ssh`) are refused,
+  since sshd looks them up in the local services database, which differs per system.
 - `from=` patterns are kept as text, not matched against a client.
-- Port names such as `host:ssh` in `permitopen` are refused, since sshd resolves them
-  through the local services database, which differs per system.
-- `build_line` keeps comments and values to one line of text without NUL or CR. sshd
-  would cut a line at a NUL and ignore a CR in the comment, and `parse_line` reads such
-  lines the same way, but a written line never contains them.
+- `expiry-time` must be digits only. sshd built on glibc also takes blanks before a field
+  (`"2025 101"`), because glibc's `strptime` skips them; OpenBSD's does not, and the
+  library follows the stricter reading.
+- An `expiry-time` without `Z` or `UTC` is local time on the server. sshd refuses one that
+  falls on the epoch in its own time zone; the library cannot know that zone, so it only
+  refuses the UTC epoch.
+- Trailing spaces, tabs and CR are dropped from the comment, so files with CRLF line ends
+  read cleanly; sshd keeps them, and they change nothing.
+- `build_line` keeps comments and values to one line of text without NUL or CR.
+
+The [GUIDE](https://github.com/JaviLianes8/authkeyline/blob/main/GUIDE.md) has every rule
+and error in detail, and the
+[CHANGELOG](https://github.com/JaviLianes8/authkeyline/blob/main/CHANGELOG.md) what
+changed in each release.
 
 ## Why
 
 An `authorized_keys` line packs an options field, a key type, a base64 blob and a comment
-into one string, and the options field has its own grammar. Splitting on whitespace or
-commas gets it wrong, and a builder that quotes values naively lets a value add options or
-whole keys. This library reads a line as sshd does (with the differences listed above),
-says why sshd would skip it, and writes lines that cannot be steered.
+into one string, and the options field has its own quoting rules. The parsers on PyPI read
+it differently from sshd (checked with sshpubkeys 3.3.1 and asyncssh 2.24.1):
+sshpubkeys turns `command="echo \"hi\""` into `echo \hi\` and accepts an unquoted
+`command=ls`, two `command` options, `permitopen="host"` and `expiry-time="soon"`;
+asyncssh reads `command="c:\x"` as `c:x`, accepts unknown options and keeps the last of
+two `command` options; both refuse lines whose key type is `rsa-sha2-256`. A line sshd
+skips can look fine, and a forced command can read differently from the one sshd runs.
+`authkeyline` is a small, typed, zero-dependency library that reads a line as sshd does,
+says why sshd would skip it, and writes lines that cannot be steered into extra options
+or keys.
+
+## Development
+
+`python scripts/fetch_upstream.py` downloads the OpenSSH sources, RFCs and draft listed in
+`tests/upstream/MANIFEST.json` (they are not part of the repository; their tests skip
+without them). `sh scripts/sshd-oracle/build.sh <folder>` builds OpenSSH's own reader;
+point `AUTHKEYLINE_SSHD_HARNESS` at it to compare. `scripts/check.ps1` runs format, lint,
+types and tests. Set `AUTHKEYLINE_E2E=1` to also build the wheel and test the installed
+package and its command.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/JaviLianes8/authkeyline/blob/main/LICENSE).
 
 ## Links
 
