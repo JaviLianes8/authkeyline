@@ -15,7 +15,7 @@ Progress:
 - [x] Docs: README, GUIDE, CHANGELOG (items 11, 12)
 - [x] Packaging, e2e and every Python (items 8, 10, 13, 14)
 - [x] Gates (item 15)
-- [ ] Five QA lenses (item 19) and independent reviewer (item 16): rounds 1 and 2 findings fixed, awaiting re-verification
+- [ ] Five QA lenses (item 19) and independent reviewer (item 16): rounds 1, 2 and 3 findings fixed, awaiting re-verification
 - [x] PR #3 and trace guard CLEAN (item 17); merge and publish left to the maintainer
 
 ## Scorecard
@@ -214,6 +214,37 @@ fetched sources, `AUTHKEYLINE_E2E=1`), each on its own: `ruff format --check .`,
 `ruff check .`, `mypy --strict src`, `mypy --strict src tests` and `pytest` (452 passed,
 5 skipped: the sshd oracle, not built there) all exit 0. The `ssh-keygen` listing oracle
 also passed on this PC against OpenSSH_10.3p1 (MSYS2). Next: each lens re-verifies.
+
+### Round 3 findings
+
+The same five lenses re-ran against fa2b326. Every round 2 finding was confirmed fixed
+(lens a: A10; lens b: B4; lens c: N1 to N4; lens d: N1, N2; lens e: G1 to G11 all killed).
+Lens b replayed 25 escaping cases against three `ssh-keygen` builds and found 0
+accept/refuse flips between 585a5b6 and fa2b326 on its 31,052-line corpus. New findings:
+
+| Lens | Id | Finding | Fix |
+| --- | --- | --- | --- |
+| a, b, c, d | A11, B5, N5, N4 | Standard input closed before the start (`<&-`) gave an `AttributeError` traceback and status 1 | `_read("-")` raises `OSError(EBADF, "standard input is closed")`, so the file is reported as unreadable (`authkeyline: -: standard input is closed`, status 2) and the files before it are still listed. In-process and subprocess tests in `test_qa_round3.py` (the POSIX one closes fd 0 before exec) |
+| d | N4 (second part) | Python 3.10: a usage error with standard error closed exited 1 | Help and usage go through the same writer as the rest of the output, which skips a missing stream; `test_a_usage_error_with_stderr_closed_exits_2`, run on 3.10 to 3.14 |
+| c | N6 | A usage error or `--help` into a closed pipe exited 120 (and printed "Exception ignored on flushing sys.stdout") | `_Parser._print_message` writes and flushes under the same broken-pipe handling as the listing, so the final flush cannot fail; subprocess tests for `--bogus 2>&1`, `--bogus` and `--help` into a closed pipe (status 2, 2, 0, no traceback) |
+| d | N3 | On Python 3.10 and 3.11 excess padding (`AAAAC3Nz=`, `AAAA=`, a valid blob plus `=`) gave "not canonical base64" where 3.12 and later say "not valid base64", so the suite failed there | `_whole_quanta` refuses padding that is too long or not at the end before `b64decode`, so every Python gives "not valid base64". An exhaustive check of every string up to 10 characters over `AQ/=!` showed the check plus each Python's `b64decode` (3.10, 3.11, 3.14) accepts exactly what 3.12 and later accept, so which lines are refused does not change. `test_misplaced_padding_gives_the_same_message_on_every_python` |
+| e | H1 (P05) | `rstrip("=")` to `strip("=")` survived | `=s3cr3t` and `==s3cr3t` cases in `test_an_option_read_as_key_blob_does_not_leak_its_value` |
+| e | H2 (P04), H3 (P11) | Dropping the C-space strip before `rstrip("=")`, or quoting the stripped text, survived | `AAB=\f` and `AAB=\v` cases with the exact reason from `parse_line` and from a hand-built record, and `test_a_hand_built_blob_keeps_its_trailing_blank_in_the_message` (`AAB= `) |
+| e | H4 (P14) | Dropping the "it looks like an option" description survived | The leak test asserts the full reason |
+
+The closed stdin and closed pipe tests failed on fa2b326 (9 cases) and pass after the fix;
+the padding test fails on 3.10 and 3.11 with the pre-check removed (5 cases each) and
+passes with it. The lens e mutants H1 to H4 were rebuilt on a copy of the fixed tree and
+run against the new tests: all 4 killed. The regex form of the pre-check was replaced by
+a linear one after timing (40 million characters: 0.08 s to refuse, 0.19 s to decode). No
+finding was disputed. Behaviour changes are in the CHANGELOG (closed stdin, help and
+usage into a closed pipe, padding messages) and the GUIDE.
+
+Fix commit: db76465. On Elena's PC from a bundle of that commit, CPython 3.10.22,
+3.11.17, 3.12.15, 3.13.2 and 3.14.2: `pytest` 464 passed, 18 skipped on each (the sshd
+oracle, the opt-in wheel test and the tests of fetched sources, absent there); on 3.14
+`ruff format --check .`, `ruff check .`, `mypy --strict src` and `mypy --strict src tests`
+each exit 0. Next: each lens re-verifies.
 
 ## Independent review (item 16)
 
