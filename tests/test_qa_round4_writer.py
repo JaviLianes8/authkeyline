@@ -11,7 +11,9 @@ from typing import Any
 
 import pytest
 
+from authkeyline import _cli
 from authkeyline._cli import main
+from authkeyline._streams import native
 
 BLOB = "AAAAC3NzaC1lZDI1NTE5AAAAIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f"
 SRC = str(Path(__file__).resolve().parents[1] / "src")
@@ -44,6 +46,11 @@ def _streams(monkeypatch: pytest.MonkeyPatch) -> tuple[io.TextIOWrapper, io.Text
     return out, err
 
 
+def _posix_names(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A POSIX name byte arrives as U+DC80..U+DCFF; Windows escapes it (see round 5).
+    monkeypatch.setattr(_cli, "native", lambda text: native(text, windows=False))
+
+
 def _exit_status(argv: list[str]) -> Any:
     with pytest.raises(SystemExit) as done:
         main(argv)
@@ -53,6 +60,7 @@ def _exit_status(argv: list[str]) -> Any:
 def test_a_missing_name_that_is_not_utf8_is_echoed_byte_for_byte(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _posix_names(monkeypatch)
     _, err = _streams(monkeypatch)
     assert main(["k\udcff.keys"]) == 2
     assert _bytes(err).startswith(b"authkeyline: k\xff.keys: ")
@@ -61,6 +69,7 @@ def test_a_missing_name_that_is_not_utf8_is_echoed_byte_for_byte(
 def test_a_broken_name_that_is_not_utf8_is_echoed_byte_for_byte(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _posix_names(monkeypatch)
     bad = tmp_path / "bad\udcff"
     bad.write_text("ssh-ed25519 AAAA=\n")
     _, err = _streams(monkeypatch)
@@ -69,6 +78,7 @@ def test_a_broken_name_that_is_not_utf8_is_echoed_byte_for_byte(
 
 
 def test_a_text_only_stream_gets_the_name_as_it_came(monkeypatch: pytest.MonkeyPatch) -> None:
+    _posix_names(monkeypatch)
     err = io.StringIO()
     monkeypatch.setattr(sys, "stderr", err)
     assert main(["k\udcff.keys"]) == 2

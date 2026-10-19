@@ -13,6 +13,8 @@ from typing import TextIO
 # Lone surrogates that surrogateescape cannot turn back into a byte: a Windows file name or
 # argument can hold them, since its command line and file names are UTF-16 without checks.
 _UNPAIRED = re.compile("[\ud800-\udc7f\udd00-\udfff]")
+# On Windows no surrogate of a name or argument stands for a byte, U+DC80..U+DCFF included.
+_ANY_SURROGATE = re.compile("[\ud800-\udfff]")
 
 
 @contextlib.contextmanager
@@ -36,10 +38,22 @@ def _silence() -> None:
     os.close(null)
 
 
+def _escaped(pattern: re.Pattern[str], text: str) -> str:
+    return pattern.sub(lambda found: f"\\u{ord(found.group()):04x}", text)
+
+
+def native(text: str, windows: bool = os.name == "nt") -> str:
+    """A file name or argument as the system gave it, ready for ``encode``.
+
+    On POSIX a surrogate in U+DC80..U+DCFF is a byte of the name and stays. Windows names
+    are UTF-16, so there every lone surrogate is escaped.
+    """
+    return _escaped(_ANY_SURROGATE, text) if windows else text
+
+
 def encode(text: str) -> bytes:
     """UTF-8 that cannot fail: a byte kept as a surrogate comes back, any other is escaped."""
-    escaped = _UNPAIRED.sub(lambda found: f"\\u{ord(found.group()):04x}", text)
-    return escaped.encode("utf-8", errors="surrogateescape")
+    return _escaped(_UNPAIRED, text).encode("utf-8", errors="surrogateescape")
 
 
 def valid_text(value: str) -> str:

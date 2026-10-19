@@ -205,11 +205,13 @@ the same way. The help and usage messages follow the same rules, so `--help | he
 exits 0, a usage error into a closed pipe exits 2, and a usage error with standard error
 closed writes nothing at all. Standard input closed before the
 start (`<&-`) is a file that cannot be read: `authkeyline: -: standard input is closed`
-and status 2, after the files before it have been listed. A byte of a file name that is
+and status 2, after the files before it have been listed. A byte of a POSIX file name that is
 not UTF-8 is written back as that byte (in `--json`, as U+FFFD); a lone surrogate that
-stands for no byte, which a Windows name can hold, is written as `\udXXX`. A name no file
-can have (a NUL in it, or such a surrogate on POSIX) gives
-`authkeyline: NAME: invalid file name` and status 2.
+stands for no byte (outside U+DC80..U+DCFF) is written as `\udXXX`. Windows names and
+arguments are UTF-16 and carry no such bytes, so there every lone surrogate, U+DC80..U+DCFF
+included, is written as `\udXXX`, in messages and in `--json`, and two names that differ
+in one stay distinct. A name no file can have (a NUL in it, or a surrogate outside
+U+DC80..U+DCFF on POSIX) gives `authkeyline: NAME: invalid file name` and status 2.
 
 ## Stability
 

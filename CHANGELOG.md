@@ -60,9 +60,12 @@ suite checks by running that code on 12,000 seeded lines.
   standard output (argparse used to send the usage line there).
 - Command line: a file name or argument holding a lone surrogate that is not an escaped
   byte (possible on Windows, whose names are unchecked UTF-16) is written as `\udXXX`
-  in messages and in `--json`, instead of ending in a traceback with status 1. A name the
-  file system cannot store (a NUL, or such a surrogate on POSIX) is a file that cannot be
-  read: `authkeyline: NAME: invalid file name`, status 2.
+  in messages and in `--json`, instead of ending in a traceback with status 1. On Windows
+  this holds for every lone surrogate, U+DC80..U+DCFF included: such a name carries no
+  byte, so it is no longer written as a raw byte (U+FFFD in `--json`), and two names
+  that differ only there stay distinct. A name the file system cannot store (a NUL, or a
+  surrogate outside U+DC80..U+DCFF on POSIX) is a file that cannot be read:
+  `authkeyline: NAME: invalid file name`, status 2.
 - Command line: standard input closed before the start (`<&-`) is reported as a file
   that cannot be read (`authkeyline: -: standard input is closed`, status 2) instead of a
   traceback with status 1.

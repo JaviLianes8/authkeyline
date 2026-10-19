@@ -15,7 +15,7 @@ from ._errors import AuthKeyError
 from ._listing import escape, keygen_comment
 from ._model import AuthorizedKey
 from ._records import PublicKey
-from ._streams import encode, put, quiet_when_the_reader_goes, valid_text, write
+from ._streams import encode, native, put, quiet_when_the_reader_goes, valid_text, write
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -48,7 +48,7 @@ class _Parser(argparse.ArgumentParser):
     def _print_message(self, message: str, file: Any = None) -> None:
         if message:
             with quiet_when_the_reader_goes():
-                put(file, message)
+                put(file, native(message))
 
     def error(self, message: str) -> NoReturn:
         # argparse sends the usage to stdout when stderr is closed; it belongs to stderr only.
@@ -58,9 +58,10 @@ class _Parser(argparse.ArgumentParser):
 
 def _run(args: argparse.Namespace, status: list[int]) -> None:
     report: list[dict[str, Any]] = []
-    for name in args.files or ["-"]:
+    for path in args.files or ["-"]:
+        name = native(path)
         try:
-            text = _read(name)
+            text = _read(path)
         except OSError as exc:
             # The status comes first: the write may fail when the reader has gone.
             status[0] = 2

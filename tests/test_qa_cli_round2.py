@@ -11,8 +11,10 @@ from pathlib import Path
 
 import pytest
 
+from authkeyline import _cli
 from authkeyline._cli import main
 from authkeyline._listing import escape
+from authkeyline._streams import native
 
 BLOB = "AAAAC3NzaC1lZDI1NTE5AAAAIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f"
 KEY = f"ssh-ed25519 {BLOB}"
@@ -96,8 +98,10 @@ def test_the_listing_splits_fields_at_tabs(
 
 
 def test_json_file_names_are_valid_unicode(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # The POSIX rule; on Windows U+DCFF is no byte and is escaped (see round 5).
+    monkeypatch.setattr(_cli, "native", lambda text: native(text, windows=False))
     path = tmp_path / "k\udcff.keys"
     try:
         path.write_text(f"{KEY} c\n")
