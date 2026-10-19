@@ -143,6 +143,7 @@ def test_every_public_name_has_a_runnable_example() -> None:
     objects = [authkeyline, *(getattr(authkeyline, name) for name in authkeyline.__all__)]
     objects += [AuthorizedKey.public_key, AuthorizedKey.values, AuthorizedKey.fingerprint]
     objects += [AuthorizedKey.environment, AuthorizedKey.key_bytes, PublicKey.fingerprint]
+    objects += [AuthorizedKey.has_flag]
     for target in objects:
         if target is KEY_TYPES:
             continue  # shown in the package docstring

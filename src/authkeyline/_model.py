@@ -125,6 +125,11 @@ class AuthorizedKey:
 
         This looks at the names on the line, not at what they add up to: ``restrict`` does
         not make ``has_flag("no-pty")`` true.
+
+        >>> from authkeyline import AuthorizedKey, KeyOption
+        >>> key = AuthorizedKey("ssh-ed25519", "", (KeyOption("Restrict"),))
+        >>> key.has_flag("restrict"), key.has_flag("no-pty")
+        (True, False)
         """
         wanted = require_str(name, "name").lower()
         return any(o.value is None and o.name.lower() == wanted for o in self.options)
