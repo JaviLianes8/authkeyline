@@ -15,7 +15,7 @@ Progress:
 - [x] Docs: README, GUIDE, CHANGELOG (items 11, 12)
 - [x] Packaging, e2e and every Python (items 8, 10, 13, 14)
 - [x] Gates (item 15)
-- [ ] Five QA lenses (item 19) and independent reviewer (item 16): rounds 1 to 5 findings fixed, awaiting re-verification
+- [ ] Five QA lenses (item 19) and independent reviewer (item 16): rounds 1 to 6 findings fixed, awaiting re-verification
 - [x] PR #3 and trace guard CLEAN (item 17); merge and publish left to the maintainer
 
 ## Scorecard
@@ -302,6 +302,38 @@ Fix commit: 624cbd5. On Elena's PC from a bundle of that commit, CPython 3.14:
 `ruff format --check .`, `ruff check .`, `mypy --strict src`, `mypy --strict src tests`
 and `pytest` (542 passed, 18 skipped: the sshd oracle, the opt-in wheel test and the
 tests of fetched sources, absent there) each exit 0. Next: each lens re-verifies.
+
+### Round 6 findings
+
+Five fresh reviewers ran a new round against 2f246bb, the commit before the round 1 fixes,
+so most of what they found had already been fixed. Each finding was replayed against
+87caef3 first:
+
+| Lens | Id | Finding | At 87caef3 | Fix |
+| --- | --- | --- | --- | --- |
+| a, c | A1, F2 | Hand-built key type quoted in full | Fixed (round 1, A1): 84-character message for a 5,000-character type | None needed |
+| a, b, c, d | A2, B1, F3, F1 | Listing differs from `ssh-keygen -l` (options as comment, `#` comments, trailing blanks, control bytes, bytes that are not UTF-8) | Fixed (round 1): byte-identical to OpenSSH_10.3p1 on every reported case. The one remaining difference, two blanks after the options, is listed on purpose and documented in README and GUIDE | None needed |
+| a, c | A3, F6 | Wrong field types give `AttributeError` | Fixed (round 1): `TypeError` naming the field for every reported case | None needed |
+| a | A4 | `ssh-dss BLOB` reported as `unknown option 'ssh-dss'` | Still open | When the options field fails, its first word holds no `=`, `"` or `,`, and the next field is base64, the reason is `unsupported key type 'ssh-dss'`; `test_qa_round6.py` |
+| a | A5 | `-E` without help, 0.x CHANGELOG undated | Fixed (round 1, A8 and A9) | None needed |
+| b | B2, B3 | glibc blanks in `expiry-time`; local epoch in a UTC zone | Documented (round 1, B1 and B2) as deliberate differences | None needed |
+| c | F1 | `no-pty, environment="..."` leaks the value | Fixed (round 1, F2): the type is described, not quoted | None needed |
+| c, d | F4, F2 | `\| head` traceback, status 120 | Fixed (rounds 1 to 3) | None needed |
+| c | F5 | `str` subclasses steer `build_line` and `fingerprint` | `build_line` fixed (round 1, F6); `fingerprint(Eq("sha1"))`, with only `__eq__` overridden, still gave MD5 | Both `fingerprint` methods compare a plain copy of `hash`; `test_qa_round6.py` |
+| d | F3, F4 | sdist `.c` check cannot fail; `--json` lone surrogates | Fixed (round 1) | None needed |
+| e | F1 to F13 | 13 surviving mutants | Killed (round 1 contracts) | None needed |
+
+The 10 new cases in `test_qa_round6.py` failed on 87caef3 and pass after the fix. The older
+`test_parse.py` case that pinned `unknown option` for `ssh-dss AAAA` now expects the new
+reason. A plain unknown option (`bogus ssh-ed25519 ...`, `bogus=1 BLOB`, `no-pty,bogus BLOB`)
+keeps its reason. Both changes are in the CHANGELOG, and the A4 rule is in the GUIDE. No
+finding was disputed.
+
+Fix commit: 7c0b87d. On Elena's PC from a bundle of that commit, CPython 3.14:
+`ruff format --check .`, `ruff check .`, `mypy --strict src`, `mypy --strict src tests`
+and `pytest` (557 passed, 18 skipped: the sshd oracle, the opt-in wheel test and the
+tests of fetched sources, absent there) each exit 0. On this PC the `ssh-keygen` listing
+oracle (OpenSSH_10.3p1) and the fetched-source tests pass. Next: each lens re-verifies.
 
 ## Independent review (item 16)
 
