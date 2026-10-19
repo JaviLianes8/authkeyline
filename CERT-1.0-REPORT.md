@@ -246,6 +246,38 @@ oracle, the opt-in wheel test and the tests of fetched sources, absent there); o
 `ruff format --check .`, `ruff check .`, `mypy --strict src` and `mypy --strict src tests`
 each exit 0. Next: each lens re-verifies.
 
+### Round 4 findings
+
+The same five lenses re-ran against 6857da6. Every round 3 finding was confirmed fixed
+(lens a: A10 docs and A11; lens b: B5, with ssh-keygen and the library agreeing on 119 of
+124 padding variants, the other 5 being `\r=` where the library follows sshd as the GUIDE
+says, and identical `--check` messages on every Python from 3.10 to 3.14; lens d: N3, N4,
+wheel and sdist on five Pythons, 464 passed). New findings:
+
+| Lens | Id | Finding | Fix |
+| --- | --- | --- | --- |
+| a, b, c | A12, B6, N7 | With standard error closed, a usage error wrote its usage line to standard output: argparse's `error()` calls `print_usage(sys.stderr)`, which falls back to stdout when stderr is `None` | `_Parser.error` writes the usage to stderr only, through the writer that skips a closed stream; `test_a_usage_error_with_stderr_closed_leaves_stdout_empty` and a subprocess test (stdout empty, status 2) |
+| c, d, e | N8, F1, F2, F8 | An argument or file name holding a lone surrogate outside U+DC80..U+DCFF (a Windows name can) ended in a `UnicodeEncodeError` traceback with status 1: usage errors, the unreadable and broken file reports, and `--json` | `_streams.encode` writes such a surrogate as `\udXXX` and still turns an escaped byte back into that byte; `--json` uses it too. A name no file can have (a NUL, or such a surrogate on POSIX, where `open` raises `ValueError`) is reported as `invalid file name`, status 2. In-process tests on every platform, broken-file, `--check`, `--json` and subprocess tests on Windows |
+| e | Q17 | Usage errors written to stdout survived | `test_a_usage_error_goes_to_stderr_only_and_ends_with_a_newline` asserts the exact stderr bytes and an empty stdout |
+| e | Q23 | `raise` to `pass` in the closed-reader handler survived (ENOSPC swallowed, status 0) | `test_an_output_error_that_is_not_a_closed_reader_is_raised` (ENOSPC, EIO) |
+| e | Q19 | `message.rstrip()` in `_print_message` survived | Exact usage error bytes, and the help ends with one newline |
+| e | Q35 | `surrogateescape` to `replace` survived | Missing and broken files named with byte 0xFF: stderr holds that exact byte |
+| e | Q31 | Dropping the flush of a text-only stream survived | `test_a_text_only_stream_is_flushed_under_the_reader_check` (a text-only stream whose flush finds the reader gone: flushed once, status 0) |
+| e | Q36 | U+FFFD on a text-only stream survived | `test_a_text_only_stream_gets_the_name_as_it_came` |
+| e | Q32 | Dropping the flush before the raw write survived | `test_text_already_waiting_on_stdout_comes_first` |
+
+The stream helpers moved from `_cli.py` to a private `_streams.py` to keep both files
+under 200 lines. The behaviour tests for A12 and N8 failed on 6857da6 (10 cases) and pass
+after the fix. The lens e mutants Q17, Q19, Q23, Q31, Q32, Q35 and Q36, and the removed
+`error` override, were rebuilt on a copy of the fixed tree and run against the new tests
+in `test_qa_round4.py` and `test_qa_round4_writer.py`: all 8 killed. No finding was
+disputed. Behaviour changes are in the CHANGELOG and the GUIDE.
+
+Fix commit: 2488944. On Elena's PC from a bundle of that commit, CPython 3.14:
+`ruff format --check .`, `ruff check .`, `mypy --strict src`, `mypy --strict src tests`
+and `pytest` (483 passed, 18 skipped: the sshd oracle, the opt-in wheel test and the
+tests of fetched sources, absent there) each exit 0. Next: each lens re-verifies.
+
 ## Independent review (item 16)
 
 Pending.
