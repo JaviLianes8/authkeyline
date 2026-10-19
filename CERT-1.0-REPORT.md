@@ -15,7 +15,7 @@ Progress:
 - [x] Docs: README, GUIDE, CHANGELOG (items 11, 12)
 - [x] Packaging, e2e and every Python (items 8, 10, 13, 14)
 - [x] Gates (item 15)
-- [ ] Five QA lenses (item 19) and independent reviewer (item 16): rounds 1, 2 and 3 findings fixed, awaiting re-verification
+- [ ] Five QA lenses (item 19) and independent reviewer (item 16): rounds 1 to 5 findings fixed, awaiting re-verification
 - [x] PR #3 and trace guard CLEAN (item 17); merge and publish left to the maintainer
 
 ## Scorecard
@@ -276,6 +276,31 @@ disputed. Behaviour changes are in the CHANGELOG and the GUIDE.
 Fix commit: 2488944. On Elena's PC from a bundle of that commit, CPython 3.14:
 `ruff format --check .`, `ruff check .`, `mypy --strict src`, `mypy --strict src tests`
 and `pytest` (483 passed, 18 skipped: the sshd oracle, the opt-in wheel test and the
+tests of fetched sources, absent there) each exit 0. Next: each lens re-verifies.
+
+### Round 5 findings
+
+The lenses re-ran against 08c1915. Lens a confirmed A10, A11 and A12 fixed. New findings:
+
+| Lens | Id | Finding | Fix |
+| --- | --- | --- | --- |
+| a | A13 | On Windows a name or argument holding U+DC80..U+DCFF was written as the raw byte 0x80..0xFF (U+FFFD in `--json`), so `ok\udc80` and `ok\udc81` got the same JSON `file`, against the GUIDE and CHANGELOG | New `_streams.native`: on Windows every lone surrogate of a file name or argument (the names in reports and `--json`, and argparse messages) is escaped as `\udXXX`; on POSIX the name is left for `encode`, so a name byte still comes back as that byte. Windows contracts for broken files, `--json` and a real process (`bad\udc80`, `nofile\udc80`, two files that stay distinct); GUIDE and CHANGELOG say which surrogates are bytes where |
+| e | E1-N01 | `_UNPAIRED` without the U+DD00..U+DFFF range survived | `encode` boundary table (U+D800, U+DBFF, U+DC00, U+DC7F, U+DD00, U+DFFF), plus missing-file and usage-error tables through `main`, and broken-file and `--json` tables on Windows |
+| e | E2-N05 | Upper bound U+DFFF moved to U+DFFE survived | The same table (U+DFFF) |
+| e | E3-N02 | Gap bound U+DC7F moved to U+DC80 survived | `encode` and a POSIX-mode `main` echo byte 0x80 as well as 0xFF; `--json` `line_base64` keeps 0x80 and 0xFF |
+| e | E4-N29 | `sub(..., count=1)` survived | Two unpaired surrogates in one string, one name and one argument |
+
+Run on a copy of 08c1915 given an identity `native`, 15 round 5 cases failed: the 5
+end-to-end A13 cases (broken file and `--json` named with U+DC80 and U+DCFF, and the real
+process) and 10 unit cases of the new helper. All pass after the fix. The three round 4 tests and the round 2 `--json` test
+that pinned the byte echo of a name now run in POSIX mode (`native(..., windows=False)`),
+since that rule is POSIX only. The four lens e mutants were rebuilt on copies of the fixed
+tree and run against `test_qa_round5.py`: all 4 killed. No finding was disputed.
+Behaviour changes are in the CHANGELOG and the GUIDE.
+
+Fix commit: 624cbd5. On Elena's PC from a bundle of that commit, CPython 3.14:
+`ruff format --check .`, `ruff check .`, `mypy --strict src`, `mypy --strict src tests`
+and `pytest` (542 passed, 18 skipped: the sshd oracle, the opt-in wheel test and the
 tests of fetched sources, absent there) each exit 0. Next: each lens re-verifies.
 
 ## Independent review (item 16)
