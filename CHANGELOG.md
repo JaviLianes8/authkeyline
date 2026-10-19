@@ -38,6 +38,9 @@ suite checks by running that code on 12,000 seeded lines.
   value. A key type holding `=` or `"`, which is what a blank after a comma leaves where
   the key type goes (`no-pty, environment="..."`), is not quoted at all, so the value of
   that option cannot reach the message.
+- The "key blob is not valid base64" and "not canonical base64" messages no longer quote
+  a blob field that holds `"` or an `=` before the padding: that is an option written
+  where the blob goes (`ssh-ed25519 environment="..."`), and its value may be a secret.
 - The public names report `authkeyline` as their module, so pickles and reprs never name
   a private module.
 - Command line: the listing shows the comment column as portable `ssh-keygen -l` does in
@@ -48,7 +51,10 @@ suite checks by running that code on 12,000 seeded lines.
 - Command line: `--json` writes valid Unicode. A byte that is not UTF-8 becomes U+FFFD,
   and such an entry also carries `line_base64`, the exact bytes of the line.
 - Command line: when the reader closes the pipe early (`| head`), the command ends
-  quietly with the status it had instead of a traceback.
+  quietly with the status it had instead of a traceback. The status of a broken or
+  unreadable file is set before its report is written, so `2>&1 | head` still exits 1
+  or 2, and a standard stream closed before the start (`>&-`) is skipped instead of
+  ending in a traceback.
 
 ### Added
 

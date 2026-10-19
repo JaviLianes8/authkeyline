@@ -54,14 +54,15 @@ def _run(args: argparse.Namespace, status: list[int]) -> None:
         try:
             text = _read(name)
         except OSError as exc:
-            _write(sys.stderr, f"authkeyline: {name}: {exc.strerror or exc}")
+            # The status comes first: the write may fail when the reader has gone.
             status[0] = 2
+            _write(sys.stderr, f"authkeyline: {name}: {exc.strerror or exc}")
             continue
         problems = {problem.line: problem.message for problem in check_file(text)}
-        for number, message in problems.items():
-            _write(sys.stderr, f"{name}:{number}: {message}")
         if problems:
             status[0] = max(status[0], 1)
+        for number, message in problems.items():
+            _write(sys.stderr, f"{name}:{number}: {message}")
         if args.check:
             continue
         for number, raw in enumerate(text.split("\n"), start=1):
@@ -102,7 +103,9 @@ def _decode(data: bytes) -> str:
     return data.decode("utf-8", errors="surrogateescape")
 
 
-def _write(stream: TextIO, text: str) -> None:
+def _write(stream: TextIO | None, text: str) -> None:
+    if stream is None:
+        return  # started with the stream closed (>&-), so there is nobody to tell
     raw = getattr(stream, "buffer", None)
     if raw is None:
         stream.write(text + "\n")

@@ -27,6 +27,8 @@ COLUMN_LINES = [
     "no-pty {key} #note",
     "{key} tail  ",
     "{key} a\tb",
+    "{tabbed}\tmy comment",
+    "no-pty\t{tabbed}",
 ]
 ESCAPED_LINES = [
     "{key} esc\x1b[31mred\x07\x7f",
@@ -48,7 +50,8 @@ _KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZ
 def test_comment_column_matches_ssh_keygen(tmp_path: Path) -> None:
     escapes = _escapes(tmp_path / "probe")
     lines = COLUMN_LINES + (ESCAPED_LINES if escapes else [])
-    raw = "\n".join(line.format(key=_KEY) for line in lines).encode() + b"\n"
+    tabbed = _KEY.replace(" ", "\t")
+    raw = "\n".join(line.format(key=_KEY, tabbed=tabbed) for line in lines).encode() + b"\n"
     if escapes:
         raw += _KEY.encode() + b" caf\xe9 \xff\n"
     path = tmp_path / "column"

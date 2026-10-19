@@ -176,9 +176,21 @@ locale:
   are written as `\ooo` octal escapes of their bytes (tabs stay), so a comment cannot
   send escape sequences to the terminal.
 
-Two differences remain on purpose: the Windows port of OpenSSH writes control bytes as
-they are, and a line that sshd uses but `ssh-keygen` cannot read (two blanks after the
-options, a CR inside the options or the blob) is listed all the same.
+The reference is `ssh-keygen` built on glibc (Linux), whose `wcwidth` decides what is
+printable. The library makes the same decision from the Unicode database of the running
+Python (`unicodedata`), so "unassigned" means unassigned in that Python's Unicode version:
+a code point added later (U+1C89 or U+1FAE9 in Unicode 16.0, for example) is escaped on
+Python 3.13 and earlier and shown on 3.14, and glibc's own tables may be older or newer
+than Python's. Control characters are escaped on every Python.
+
+Other differences:
+
+- the Windows port of OpenSSH writes control bytes as they are;
+- the Cygwin and MSYS2 build of `ssh-keygen` (the one in Git for Windows) prints U+2028,
+  U+2029 and some unassigned code points as they are, and escapes every character outside
+  the Basic Multilingual Plane, emoji included, where the library shows them;
+- a line that sshd uses but `ssh-keygen` cannot read (two blanks after the options, a CR
+  inside the options or the blob) is listed all the same, on purpose.
 
 `-E md5` switches the hash, for the certificate authority's fingerprint too. `--json`
 prints the options, sizes and certificate details; its text is valid Unicode, a byte that
@@ -186,8 +198,9 @@ is not UTF-8 becomes U+FFFD, and an entry where that happened also carries `line
 the exact bytes of the line. `--check` prints nothing but the broken lines. Broken lines go
 to standard error as `FILE:LINE: reason`. The exit status is 0 when every line is fine, 1
 when a line is broken and 2 when a file cannot be read or the arguments are wrong. When
-the reader stops early (`authkeyline FILE | head -1`), the command ends quietly with the
-status it had so far.
+the reader stops early (`authkeyline FILE | head -1`, or `2>&1 | head -1`), the command
+ends quietly with the status it had so far, which already counts the line it was
+reporting; a stream that was closed before the start (`>&-`) is skipped the same way.
 
 ## Stability
 

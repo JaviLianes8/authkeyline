@@ -126,10 +126,16 @@ portable OpenSSH's `ssh-keygen -l` does in a UTF-8 locale: the options field sta
 a missing comment, a comment starting with `#` is not shown, the comment stops at a CR and
 keeps its trailing blanks, and control characters and bytes that are not UTF-8 are written
 as `\ooo` octal escapes, so a hostile comment cannot send escape sequences to a terminal.
-The test suite compares this with `ssh-keygen` 10.3p1, and it was checked against 10.2p1
-on Linux. Two differences remain: the Windows port of OpenSSH (9.5p2) writes control bytes
-as they are, and a line sshd uses but `ssh-keygen` cannot read (two blanks after the
-options) is still listed.
+The reference is `ssh-keygen` built on glibc (Linux), but the Unicode tables come from the
+running Python: a code point assigned after that Python's Unicode version is escaped, so
+the same file can list differently on another Python or C library (never for a control
+character). The test suite compares the comment column and the escaping of control bytes
+and bytes that are not UTF-8 with the `ssh-keygen` it finds (10.3p1 here), and the listing
+was checked against 10.2p1 on Linux. Other builds differ: the Windows port of OpenSSH
+(9.5p2) writes control bytes as they are, and the Cygwin and MSYS2 build (the one in Git
+for Windows) prints U+2028 and U+2029 as they are and escapes characters outside the Basic
+Multilingual Plane, such as emoji. A line sshd uses but `ssh-keygen` cannot read (two
+blanks after the options) is still listed.
 
 ## API
 

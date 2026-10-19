@@ -31,12 +31,21 @@ def decode_base64(text: str) -> bytes:
     try:
         raw = base64.b64decode(clean, validate=True)
     except (binascii.Error, ValueError) as exc:
-        raise AuthKeyError(f"key blob is not valid base64: {shown(text)}") from exc
+        raise AuthKeyError(f"key blob is not valid base64{_shown_blob(text)}") from exc
     if base64.b64encode(raw).decode("ascii") != clean:
-        raise AuthKeyError(f"key blob is not canonical base64: {shown(text)}")
+        raise AuthKeyError(f"key blob is not canonical base64{_shown_blob(text)}")
     if len(raw) > MAX_BLOB_BYTES:
         raise _too_big()
     return raw
+
+
+def _shown_blob(text: str) -> str:
+    """The blob field for a message; one that looks like an option is described, not quoted."""
+    # "ssh-ed25519 environment=..." puts an option where the blob goes, and its value may be
+    # a secret. Base64 holds "=" only as trailing padding and never a quote.
+    if '"' in text or "=" in text.translate(_C_SPACE).rstrip("="):
+        return " (it looks like an option, so it is not quoted)"
+    return f": {shown(text)}"
 
 
 def _too_big() -> AuthKeyError:
