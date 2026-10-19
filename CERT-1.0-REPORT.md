@@ -178,7 +178,10 @@ OpenSSH_for_Windows_9.5p2. No finding was disputed. Lens a's note on `requires-p
 (3.10 while the house template says 3.9) was left to lens d, which raised nothing: 3.9 is
 past its end of life and every supported version from 3.10 up was run.
 
-Fix commit: see the commit that adds this section and the one after it.
+Fix commit: 882f4e0. Gates there, from a fresh clone on another machine (CPython 3.14,
+fetched sources, `AUTHKEYLINE_E2E=1`), each on its own: `ruff format --check .`,
+`ruff check .`, `mypy --strict src`, `mypy --strict src tests` and `pytest` (425 passed,
+5 skipped: the sshd oracle, not built there) all exit 0. Next: each lens re-verifies.
 
 ## Independent review (item 16)
 
