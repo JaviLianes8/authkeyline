@@ -106,7 +106,9 @@ print(public.short_type, public.bits, public.fingerprint())
 then reads the line back: if the result is not the same record it refuses. It also
 refuses option names that are not flags or valued options, values or comments holding
 NUL, CR or LF, and values ending in a backslash (sshd would read the closing quote as
-escaped). Quotes in values are escaped. Fields of the wrong type raise `TypeError`.
+escaped), and a blob holding a space, tab, CR, LF or NUL (a read line may carry CR in
+its blob, which sshd skips, but a written one never does). Quotes in values are escaped.
+Fields of the wrong type raise `TypeError`.
 
 ```python
 import dataclasses
