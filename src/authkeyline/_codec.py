@@ -5,11 +5,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from ._errors import AuthKeyError, require_str, shown, type_name
+from ._errors import AuthKeyError, require_str, shown
 from ._keytypes import KEY_TYPES
 from ._model import AuthorizedKey, KeyOption
 from ._options import read_options
-from ._optrules import VALUED, flag_name
 
 _BLANK = " \t"
 _FIELD_END = re.compile("[ \t]")
@@ -107,56 +106,6 @@ def check_file(text: str) -> list[LineProblem]:
         except AuthKeyError as exc:
             problems.append(LineProblem(number, exc.reason))
     return problems
-
-
-def build_line(key: AuthorizedKey) -> str:
-    """Render an :class:`AuthorizedKey` as one line, refusing anything that would not read back.
-
-    Option names must be known flags or valued options, values cannot hold NUL, CR or LF or
-    end with a backslash, the comment cannot hold them either (sshd would cut or ignore
-    them, so a written line keeps to plain text), and the result must parse back to the
-    same record.
-
-    >>> from authkeyline import AuthorizedKey, KeyOption, build_line
-    >>> blob = "AAAAC3NzaC1lZDI1NTE5AAAAIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f"
-    >>> key = AuthorizedKey("ssh-ed25519", blob, (KeyOption("restrict"),), "ci")
-    >>> build_line(key) == f"restrict ssh-ed25519 {blob} ci"
-    True
-    """
-    if not isinstance(key, AuthorizedKey):
-        raise TypeError(f"key must be an AuthorizedKey, not {type_name(key)}")
-    if key.key_type not in KEY_TYPES:
-        raise AuthKeyError(f"unsupported key type {shown(key.key_type)}")
-    if not key.key_base64 or any(char in key.key_base64 for char in " \t\r\n\0"):
-        raise AuthKeyError("key blob must be one base64 word")
-    fields = []
-    if key.options:
-        fields.append(",".join(_build_option(option) for option in key.options))
-    fields += [key.key_type, key.key_base64]
-    if key.comment:
-        if any(char in key.comment for char in "\0\r\n"):
-            raise AuthKeyError("comment holds a NUL or a line break")
-        fields.append(key.comment)
-    line = " ".join(fields)
-    if parse_line(line) != key:
-        raise AuthKeyError("the record does not read back the same; check the fields' spacing")
-    return line
-
-
-def _build_option(option: KeyOption) -> str:
-    name = option.name
-    if option.value is None:
-        if flag_name(name) is None:
-            raise AuthKeyError(f"{shown(name)} is not a flag option")
-        return name
-    if name.lower() not in VALUED:
-        raise AuthKeyError(f"{shown(name)} is not a valued option")
-    value = option.value
-    if any(char in value for char in "\0\r\n"):
-        raise AuthKeyError(f"value of {name!r} holds a NUL or a line break")
-    if value.endswith("\\"):
-        raise AuthKeyError(f"value of {name!r} ends with a backslash, which sshd cannot read")
-    return name + '="' + value.replace('"', '\\"') + '"'
 
 
 def _content(line: str) -> str:

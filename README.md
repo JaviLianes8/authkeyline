@@ -1,5 +1,7 @@
 # authkeyline
 
+[![Lianes8 Certified](https://lianes8studio.com/certified/lianes8-certified-badge.svg)](https://lianes8studio.com/certified)
+
 Parse, check and safely build OpenSSH `authorized_keys` lines into typed records,
 the way sshd reads them. Zero dependencies.
 
@@ -136,46 +138,59 @@ comments in any encoding included (the test suite compares them).
 | `Certificate` | `cert_type`, `serial`, `key_id`, `principals`, validity, critical options, extensions, `ca_key`, `signature_type` |
 | `LineProblem` | `line` number and `message` |
 | `KEY_TYPES` | The key type names sshd accepts, certificates included |
-| `AuthKeyError` | A `ValueError` with `reason` and `line` |
+| `AuthKeyError` | A `ValueError` with `reason` and `line`; arguments of the wrong type raise `TypeError` |
 
-## What it follows
+## Rules it follows
 
-- The options grammar and rules of OpenSSH's `sshauthopt_parse` and the option list of
-  sshd(8): case-insensitive names, quoted values, `no-` forms, single `command`,
-  `principals` and `from`, `permitopen` and `permitlisten` targets, `tunnel`,
-  `expiry-time`, `environment` (first value of a name wins).
-- The key type table of OpenSSH (`ssh-ed25519`, `sk-ssh-ed25519@openssh.com`,
-  `ecdsa-sha2-nistp256/384/521`, `sk-ecdsa-sha2-nistp256@openssh.com`, `ssh-rsa`,
-  `ssh-mldsa44-ed25519`, their certificates, and the `rsa-sha2-256/512` names that sshd
-  reads as RSA keys), the blob layouts of RFC 4253, RFC 5656 and RFC 8709, and the
-  certificate format of draft-miller-ssh-cert.
-- Fingerprints are computed over the bare key, as `ssh-keygen -l` does, so a certificate
-  has the fingerprint of its key.
-
-Where it differs from sshd, on purpose:
+Lines are read the way sshd's own authorized_keys loop reads them: the option grammar and
+rules of OpenSSH's `sshauthopt_parse`, the key type table of `sshkey.c` (certificates and
+the `rsa-sha2-256` and `rsa-sha2-512` aliases included), the blob layouts of RFC 4253,
+RFC 5656 and RFC 8709 and the certificate format of draft-miller-ssh-cert. The test suite
+compares the library with OpenSSH's own C code, built from a pinned commit, on 12,000
+seeded lines, and with `ssh-keygen -l` on fresh keys. Where it differs from sshd, on
+purpose:
 
 - Certificate signatures are not verified (that needs a crypto library), so a certificate
   with a forged signature parses while sshd skips it. The signature type is checked
-  against the CA key. Certificates are rare in `authorized_keys`; CA keys marked
-  `cert-authority` are plain keys and fully checked.
+  against the CA key. CA keys marked `cert-authority` are plain keys and fully checked.
+- Ports given by service name in `permitopen` and `permitlisten` (`host:ssh`) are refused,
+  since sshd looks them up in the local services database, which differs per system.
 - `from=` patterns are kept as text, not matched against a client.
-- Port names such as `host:ssh` in `permitopen` are refused, since sshd resolves them
-  through the local services database, which differs per system.
-- `build_line` keeps comments and values to one line of text without NUL or CR. sshd
-  would cut a line at a NUL and ignore a CR in the comment, and `parse_line` reads such
-  lines the same way, but a written line never contains them.
+- Trailing spaces, tabs and CR are dropped from the comment, so files with CRLF line ends
+  read cleanly; sshd keeps them, and they change nothing.
+- `build_line` keeps comments and values to one line of text without NUL or CR.
+
+The [GUIDE](https://github.com/JaviLianes8/authkeyline/blob/main/GUIDE.md) has every rule
+and error in detail, and the
+[CHANGELOG](https://github.com/JaviLianes8/authkeyline/blob/main/CHANGELOG.md) what
+changed in each release.
 
 ## Why
 
 An `authorized_keys` line packs an options field, a key type, a base64 blob and a comment
-into one string, and the options field has its own grammar. Splitting on whitespace or
-commas gets it wrong, and a builder that quotes values naively lets a value add options or
-whole keys. This library reads a line as sshd does (with the differences listed above),
-says why sshd would skip it, and writes lines that cannot be steered.
+into one string, and the options field has its own quoting rules. The parsers on PyPI read
+it differently from sshd (checked with sshpubkeys 3.3.1 and asyncssh 2.24.1):
+sshpubkeys turns `command="echo \"hi\""` into `echo \hi\` and accepts an unquoted
+`command=ls`, two `command` options, `permitopen="host"` and `expiry-time="soon"`;
+asyncssh reads `command="c:\x"` as `c:x`, accepts unknown options and keeps the last of
+two `command` options; both refuse lines whose key type is `rsa-sha2-256`. A line sshd
+skips can look fine, and a forced command can read differently from the one sshd runs.
+`authkeyline` is a small, typed, zero-dependency library that reads a line as sshd does,
+says why sshd would skip it, and writes lines that cannot be steered into extra options
+or keys.
+
+## Development
+
+`python scripts/fetch_upstream.py` downloads the OpenSSH sources, RFCs and draft listed in
+`tests/upstream/MANIFEST.json` (they are not part of the repository; their tests skip
+without them). `sh scripts/sshd-oracle/build.sh <folder>` builds OpenSSH's own reader;
+point `AUTHKEYLINE_SSHD_HARNESS` at it to compare. `scripts/check.ps1` runs format, lint,
+types and tests. Set `AUTHKEYLINE_E2E=1` to also build the wheel and test the installed
+package and its command.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/JaviLianes8/authkeyline/blob/main/LICENSE).
 
 ## Links
 

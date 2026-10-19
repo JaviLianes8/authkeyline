@@ -1,4 +1,4 @@
-"""The README examples run and print what their comments say; docs and versions agree."""
+"""The README and GUIDE examples run and print what their comments say; docs and versions agree."""
 
 from __future__ import annotations
 
@@ -7,34 +7,46 @@ import io
 import re
 from pathlib import Path
 
+import pytest
+
 import authkeyline
 
 ROOT = Path(__file__).resolve().parents[1]
 README = (ROOT / "README.md").read_text(encoding="utf-8")
+# Each document, with its number of Python blocks and of printed lines they promise.
+DOCS = {"README.md": (5, 14), "GUIDE.md": (5, 11)}
 
 
-def _python_blocks() -> list[str]:
-    return re.findall(r"```python\n(.*?)```", README, flags=re.DOTALL)
+def _python_blocks(text: str) -> list[str]:
+    return re.findall(r"```python\n(.*?)```", text, flags=re.DOTALL)
 
 
 def _expected_output(block: str) -> list[str]:
-    """Comment lines in the README examples hold exactly what the block prints, in order."""
+    """Comment lines at the end of an example hold exactly what the block prints, in order."""
     return [line[2:] for line in block.splitlines() if line.startswith("# ")]
 
 
-def test_every_readme_example_runs_and_prints_its_comments() -> None:
-    blocks = _python_blocks()
-    assert len(blocks) == 5
+@pytest.mark.parametrize("name", sorted(DOCS))
+def test_every_example_runs_and_prints_its_comments(name: str) -> None:
+    blocks = _python_blocks((ROOT / name).read_text(encoding="utf-8"))
+    assert len(blocks) == DOCS[name][0]
     checked = 0
     for block in blocks:
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
-            exec(compile(block, "README.md", "exec"), {"__name__": "readme"})
+            exec(compile(block, name, "exec"), {"__name__": "docs"})
         expected = _expected_output(block)
         assert expected, block
         assert out.getvalue().splitlines() == expected
         checked += len(expected)
-    assert checked == 14
+    assert checked == DOCS[name][1]
+
+
+def test_readme_links_are_absolute_and_reach_the_guide_and_changelog() -> None:
+    links = re.findall(r"\]\(([^)]*)\)", README)
+    assert links and all(link.startswith("https://") for link in links), links
+    base = "https://github.com/JaviLianes8/authkeyline/blob/main/"
+    assert {base + "GUIDE.md", base + "CHANGELOG.md", base + "LICENSE"} <= set(links)
 
 
 def test_the_api_table_lists_every_public_name() -> None:

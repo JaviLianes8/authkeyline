@@ -5,6 +5,7 @@ Slow and needs the build backend, so it runs only with AUTHKEYLINE_E2E=1.
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -66,6 +67,7 @@ def test_installed_wheel_end_to_end(tmp_path: Path) -> None:
     built = _run(sys.executable, "-m", "build", "--outdir", dist, ROOT)
     assert built.returncode == 0, built.stderr
     (wheel,) = dist.glob("authkeyline-*.whl")
+    version = wheel.name.split("-")[1]
     (sdist,) = dist.glob("authkeyline-*.tar.gz")
     names = zipfile.ZipFile(wheel).namelist()
     assert "authkeyline/py.typed" in names and "authkeyline/__main__.py" in names
@@ -75,6 +77,7 @@ def test_installed_wheel_end_to_end(tmp_path: Path) -> None:
     assert "authkeyline = authkeyline._cli:main" in text
     listing = _run(sys.executable, "-m", "tarfile", "-l", sdist).stdout.decode()
     assert "IMPROVEMENTS-round" not in listing and "sshd.8" not in listing
+    assert "CERT-1.0" not in listing and "GUIDE.md" in listing and "LICENSE" in listing
     assert "tests/upstream/MANIFEST.json" in listing and "rfc" not in listing
     assert not any(line.endswith((".c", ".h")) for line in listing.splitlines())
     assert "tests/test_sources.py" in listing and "scripts/fetch_upstream.py" in listing
@@ -104,3 +107,10 @@ def test_installed_wheel_end_to_end(tmp_path: Path) -> None:
         assert out.startswith("256 SHA256:") and out.rstrip().endswith("e2e key (ED25519)")
         failed = _run(*command, "--check", cwd=work, stdin=f"bogus {good}\n".encode())
         assert failed.returncode == 1 and b"-:1: unknown option 'bogus'" in failed.stderr
+        listed = _run(*command, "--json", "-E", "md5", cwd=work, stdin=f"{cert}\n".encode())
+        (entry,) = json.loads(listed.stdout)
+        assert entry["certificate"]["principals"] == ["alice"] and entry["line"] == 1
+        assert entry["fingerprint"].startswith("MD5:") and listed.returncode == 0
+    metadata = zipfile.ZipFile(wheel).read(f"authkeyline-{version}.dist-info/METADATA").decode()
+    assert "Classifier: Development Status :: 5 - Production/Stable" in metadata
+    assert "Requires-Dist" not in metadata.split("Provides-Extra")[0]

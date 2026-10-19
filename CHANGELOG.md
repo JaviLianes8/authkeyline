@@ -6,6 +6,37 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-19
+
+The first release on PyPI. The public API (the names in `__all__`, their parameters, the
+fields of the records and the error types) is now stable and follows semantic
+versioning. Every line is read the way OpenSSH's own C code reads it, which the test
+suite checks by running that code on 12,000 seeded lines.
+
+### Changed
+
+- `expiry-time` accepts a seconds field of 61, as `strptime` in sshd does; 0.2.0 refused
+  it.
+- `build_line` raises `TypeError` for fields of the wrong type (`options` must be a tuple
+  of `KeyOption`, names and values text) instead of an `AttributeError` or a misleading
+  `AuthKeyError`. It now lives in its own private module; import it from `authkeyline`
+  as before.
+- `AuthorizedKey.values`, `AuthorizedKey.has_flag` and both `fingerprint` methods raise
+  `TypeError` for an argument that is not a `str`.
+- Error messages quote at most 40 characters of any value from the input, with its full
+  length when cut, and never the value of an `environment` option.
+- Text fields inside a key blob (type and curve names, the security key application,
+  certificate key id and principals) are read as `sshbuf_get_cstring` reads them: one
+  final NUL is allowed and dropped, a NUL before the end is refused.
+- A blob longer than OpenSSH's 128 MiB buffer is refused before it is decoded.
+
+### Added
+
+- Runnable examples in the docstring of every public name, run as doctests.
+- `GUIDE.md`, the rules in detail.
+- `scripts/sshd-oracle/`: OpenSSH's own reading code behind a small harness, and a test
+  that compares the library with it when `AUTHKEYLINE_SSHD_HARNESS` is set.
+
 ## [0.2.0]
 
 ### Fixed
