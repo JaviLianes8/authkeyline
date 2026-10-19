@@ -15,7 +15,7 @@ Progress:
 - [x] Docs: README, GUIDE, CHANGELOG (items 11, 12)
 - [x] Packaging, e2e and every Python (items 8, 10, 13, 14)
 - [x] Gates (item 15)
-- [ ] Five QA lenses (item 19) and independent reviewer (item 16): round 1 findings fixed, awaiting re-verification
+- [ ] Five QA lenses (item 19) and independent reviewer (item 16): rounds 1 and 2 findings fixed, awaiting re-verification
 - [x] PR #3 and trace guard CLEAN (item 17); merge and publish left to the maintainer
 
 ## Scorecard
@@ -182,6 +182,38 @@ Fix commit: 882f4e0. Gates there, from a fresh clone on another machine (CPython
 fetched sources, `AUTHKEYLINE_E2E=1`), each on its own: `ruff format --check .`,
 `ruff check .`, `mypy --strict src`, `mypy --strict src tests` and `pytest` (425 passed,
 5 skipped: the sshd oracle, not built there) all exit 0. Next: each lens re-verifies.
+
+### Round 2 findings
+
+The same five lenses re-ran against 585a5b6. Every round 1 finding was confirmed fixed
+(lens e: all 13 mutants killed). New findings:
+
+| Lens | Id | Finding | Fix |
+| --- | --- | --- | --- |
+| a, b, c, d | A10, B4, N4, N1 | The listing takes "unassigned" from the running Python's Unicode database, so it varies across Pythons and differs from some `ssh-keygen` builds; the docs claimed only two differences | Docs: README and GUIDE name glibc `ssh-keygen` as the reference, say the Unicode tables follow the running Python, and list the Cygwin/MSYS2 build (U+2028, U+2029 raw; characters outside the BMP escaped). Contract: `test_unassigned_code_points_follow_the_running_unicode_database` |
+| c | N3 | "key blob is not valid base64" quoted an `environment` option written where the blob goes | A blob field holding `"` or an `=` before the padding is described, not quoted (both base64 messages); `test_qa_round2.py` |
+| c, d | N1, N2 | `2>&1 \| head` exited 0 with broken lines: the status was set after the report was written | Status set before the report; in-process and subprocess tests in `test_qa_cli_round2.py` |
+| c | N2 | A stream closed before the start (`>&-`) gave a traceback | `_write` skips a missing stream; the status is kept; `test_qa_cli_round2.py` |
+| e | G1 (N27) | Unreadable then broken file: status 2 not pinned | `test_an_unreadable_file_then_a_broken_one_exits_2` |
+| e | G2, G4 (N30, N29) | Option-like key type with `=` only or `"` only not pinned | `test_an_option_like_key_type_is_never_quoted` |
+| e | G3 (N06) | Tab as a listing field separator not pinned | `test_the_listing_splits_fields_at_tabs`, and tab-separated lines added to the `ssh-keygen` oracle |
+| e | G5, G6 (N32, N33) | Both type names of a type mismatch not pinned to 40 characters | Two exact-message tests in `test_qa_round2.py` |
+| e | G7 (N11) | U+0378 (unassigned) escaping not pinned | Exact octal escape asserted |
+| e | G8 (N20) | A JSON file name that is not UTF-8 not pinned | `test_json_file_names_are_valid_unicode` |
+| e | G9 (N34) | Plain `str` option values from `values()` not pinned | `test_option_values_come_back_as_plain_str` |
+| e | G10 (N40) | `public_key` with a subclassed key type not pinned | `test_public_key_checks_a_plain_copy_of_the_key_type` |
+| e | G11 (N42) | `__module__` of methods not pinned | `test_methods_of_public_classes_name_the_public_module` (an unbound method pickles without a private module) |
+
+The behaviour tests for N3, N1/N2 and N2 failed on 585a5b6 (9 cases) and pass after the
+fix. Each lens e mutant (G1 to G11) and the reverted N1 and N3 fixes were rebuilt on a copy
+of the fixed tree and run against the new tests: all 13 killed. No finding was disputed.
+Behaviour changes are in the CHANGELOG (blob messages, exit status and closed streams).
+
+Fix commit: 552ab56. Gates there, from a fresh clone on another machine (CPython 3.14,
+fetched sources, `AUTHKEYLINE_E2E=1`), each on its own: `ruff format --check .`,
+`ruff check .`, `mypy --strict src`, `mypy --strict src tests` and `pytest` (452 passed,
+5 skipped: the sshd oracle, not built there) all exit 0. The `ssh-keygen` listing oracle
+also passed on this PC against OpenSSH_10.3p1 (MSYS2). Next: each lens re-verifies.
 
 ## Independent review (item 16)
 
