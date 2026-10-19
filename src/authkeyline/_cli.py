@@ -4,19 +4,18 @@ from __future__ import annotations
 
 import argparse
 import base64
-import contextlib
 import errno
 import json
-import os
 import sys
-from collections.abc import Iterator, Sequence
-from typing import Any, Literal, TextIO
+from collections.abc import Sequence
+from typing import Any, Literal, NoReturn
 
 from ._codec import check_file, parse_line
 from ._errors import AuthKeyError
 from ._listing import escape, keygen_comment
 from ._model import AuthorizedKey
 from ._records import PublicKey
+from ._streams import encode, put, quiet_when_the_reader_goes, valid_text, write
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -38,7 +37,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--check", action="store_true", help="only report broken lines")
     args = parser.parse_args(argv)
     status = [0]
-    with _quiet_when_the_reader_goes():
+    with quiet_when_the_reader_goes():
         _run(args, status)
     return status[0]
 
@@ -48,19 +47,13 @@ class _Parser(argparse.ArgumentParser):
 
     def _print_message(self, message: str, file: Any = None) -> None:
         if message:
-            with _quiet_when_the_reader_goes():
-                _put(file, message)
+            with quiet_when_the_reader_goes():
+                put(file, message)
 
-
-@contextlib.contextmanager
-def _quiet_when_the_reader_goes() -> Iterator[None]:
-    try:
-        yield
-    except OSError as exc:
-        # The reader went away (| head): stop quietly, as ssh-keygen does.
-        if not isinstance(exc, BrokenPipeError) and exc.errno not in (errno.EPIPE, errno.EINVAL):
-            raise
-        _silence()
+    def error(self, message: str) -> NoReturn:
+        # argparse sends the usage to stdout when stderr is closed; it belongs to stderr only.
+        self._print_message(self.format_usage(), sys.stderr)
+        self.exit(2, f"{self.prog}: error: {message}\n")
 
 
 def _run(args: argparse.Namespace, status: list[int]) -> None:
@@ -71,13 +64,13 @@ def _run(args: argparse.Namespace, status: list[int]) -> None:
         except OSError as exc:
             # The status comes first: the write may fail when the reader has gone.
             status[0] = 2
-            _write(sys.stderr, f"authkeyline: {name}: {exc.strerror or exc}")
+            write(sys.stderr, f"authkeyline: {name}: {exc.strerror or exc}")
             continue
         problems = {problem.line: problem.message for problem in check_file(text)}
         if problems:
             status[0] = max(status[0], 1)
         for number, message in problems.items():
-            _write(sys.stderr, f"{name}:{number}: {message}")
+            write(sys.stderr, f"{name}:{number}: {message}")
         if args.check:
             continue
         for number, raw in enumerate(text.split("\n"), start=1):
@@ -90,19 +83,9 @@ def _run(args: argparse.Namespace, status: list[int]) -> None:
             if args.json:
                 report.append(_as_json(name, number, raw, key, args.hash))
             else:
-                _write(sys.stdout, _listing(raw, key, args.hash))
+                write(sys.stdout, _listing(raw, key, args.hash))
     if args.json:
-        _write(sys.stdout, json.dumps(report, indent=2))
-
-
-def _silence() -> None:
-    """Point the standard streams at the null device so the final flush cannot fail."""
-    null = os.open(os.devnull, os.O_WRONLY)
-    for stream in (sys.stdout, sys.stderr):
-        # A stream that is not a real file, as under a test runner, is left alone.
-        with contextlib.suppress(OSError, ValueError, AttributeError):
-            os.dup2(null, stream.fileno())
-    os.close(null)
+        write(sys.stdout, json.dumps(report, indent=2))
 
 
 def _read(name: str) -> str:
@@ -113,29 +96,16 @@ def _read(name: str) -> str:
             raise OSError(errno.EBADF, "standard input is closed")
         stream = getattr(sys.stdin, "buffer", None)
         return sys.stdin.read() if stream is None else _decode(stream.read())
-    with open(name, "rb") as handle:
-        return _decode(handle.read())
+    try:
+        with open(name, "rb") as handle:
+            return _decode(handle.read())
+    except ValueError as exc:
+        # A NUL, or a lone surrogate the file system cannot store: no such file can exist.
+        raise OSError(errno.EINVAL, "invalid file name") from exc
 
 
 def _decode(data: bytes) -> str:
     return data.decode("utf-8", errors="surrogateescape")
-
-
-def _write(stream: TextIO | None, text: str) -> None:
-    _put(stream, text + "\n")
-
-
-def _put(stream: TextIO | None, text: str) -> None:
-    if stream is None:
-        return  # started with the stream closed (>&-), so there is nobody to tell
-    raw = getattr(stream, "buffer", None)
-    if raw is None:
-        stream.write(text)
-        stream.flush()
-        return
-    stream.flush()
-    raw.write(text.encode("utf-8", errors="surrogateescape"))
-    raw.flush()
 
 
 def _listing(raw: str, key: AuthorizedKey, hash: Literal["sha256", "md5"]) -> str:
@@ -144,29 +114,25 @@ def _listing(raw: str, key: AuthorizedKey, hash: Literal["sha256", "md5"]) -> st
     return escape(f"{public.bits} {public.fingerprint(hash)} {comment} ({public.short_type})")
 
 
-def _text(value: str) -> str:
-    """Valid Unicode for JSON: a byte that is not UTF-8 becomes U+FFFD."""
-    return value.encode("utf-8", "surrogateescape").decode("utf-8", "replace")
-
-
 def _as_json(
     name: str, number: int, raw: str, key: AuthorizedKey, hash: Literal["sha256", "md5"]
 ) -> dict[str, Any]:
     public = key.public_key()
     entry: dict[str, Any] = {
-        "file": _text(name),
+        "file": valid_text(name),
         "line": number,
         "options": [
-            [_text(o.name), None if o.value is None else _text(o.value)] for o in key.options
+            [valid_text(o.name), None if o.value is None else valid_text(o.value)]
+            for o in key.options
         ],
         "key_type": key.key_type,
         "bits": public.bits,
         "fingerprint": public.fingerprint(hash),
-        "comment": _text(key.comment),
+        "comment": valid_text(key.comment),
     }
-    if _text(raw) != raw:
+    if valid_text(raw) != raw:
         # The exact bytes of the line, since U+FFFD cannot give back the byte it replaced.
-        entry["line_base64"] = base64.b64encode(raw.encode("utf-8", "surrogateescape")).decode()
+        entry["line_base64"] = base64.b64encode(encode(raw)).decode()
     if public.application is not None:
         entry["application"] = public.application
     if public.certificate is not None:

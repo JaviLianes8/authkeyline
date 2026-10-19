@@ -56,7 +56,13 @@ suite checks by running that code on 12,000 seeded lines.
   or 2, and an output stream closed before the start (`>&-`, `2>&-`) is skipped instead
   of ending in a traceback. The help and usage messages follow the same rules: into a
   closed pipe they exit 0 and 2 instead of 120, and a usage error with standard error
-  closed exits 2 on every supported Python (Python 3.10 gave 1).
+  closed exits 2 on every supported Python (Python 3.10 gave 1) and writes nothing to
+  standard output (argparse used to send the usage line there).
+- Command line: a file name or argument holding a lone surrogate that is not an escaped
+  byte (possible on Windows, whose names are unchecked UTF-16) is written as `\udXXX`
+  in messages and in `--json`, instead of ending in a traceback with status 1. A name the
+  file system cannot store (a NUL, or such a surrogate on POSIX) is a file that cannot be
+  read: `authkeyline: NAME: invalid file name`, status 2.
 - Command line: standard input closed before the start (`<&-`) is reported as a file
   that cannot be read (`authkeyline: -: standard input is closed`, status 2) instead of a
   traceback with status 1.

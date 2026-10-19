@@ -202,9 +202,14 @@ the reader stops early (`authkeyline FILE | head -1`, or `2>&1 | head -1`), the 
 ends quietly with the status it had so far, which already counts the line it was
 reporting; an output stream that was closed before the start (`>&-`, `2>&-`) is skipped
 the same way. The help and usage messages follow the same rules, so `--help | head -0`
-exits 0 and a usage error into a closed pipe exits 2. Standard input closed before the
+exits 0, a usage error into a closed pipe exits 2, and a usage error with standard error
+closed writes nothing at all. Standard input closed before the
 start (`<&-`) is a file that cannot be read: `authkeyline: -: standard input is closed`
-and status 2, after the files before it have been listed.
+and status 2, after the files before it have been listed. A byte of a file name that is
+not UTF-8 is written back as that byte (in `--json`, as U+FFFD); a lone surrogate that
+stands for no byte, which a Windows name can hold, is written as `\udXXX`. A name no file
+can have (a NUL in it, or such a surrogate on POSIX) gives
+`authkeyline: NAME: invalid file name` and status 2.
 
 ## Stability
 
